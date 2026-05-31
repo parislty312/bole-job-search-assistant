@@ -1,0 +1,21 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+
+.DS_Store
+
+# Local secrets
+.env
+.env.*
+!.env.example
+
+# Local virtual environments
+.venv/
+venv/
+env/
+
+# Build/deploy artifacts
+dist/
+build/
+frontend.zip

@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Bole Job Matcher</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <section id="authView" class="auth-view">
+      <div class="auth-card">
+        <div class="auth-brand">
+          <span class="brand-mark">B</span>
+          <div>
+            <p class="eyebrow">Bole</p>
+            <h1>Your personal job search assistant with long-term memory</h1>
+          </div>
+        </div>
+        <p class="auth-copy">Sign in so Bole can remember your resume profile, target companies, role feedback, and job-search preferences across sessions.</p>
+
+        <div class="auth-grid">
+          <form id="loginForm" class="auth-form">
+            <h2>Login with email</h2>
+            <input id="loginEmail" type="email" autocomplete="email" placeholder="you@example.com">
+            <button class="primary-button" type="submit"><span>Continue</span></button>
+          </form>
+
+          <form id="signupForm" class="auth-form">
+            <h2>Register username</h2>
+            <input id="signupUsername" type="text" autocomplete="username" placeholder="demo_user_001">
+            <button class="secondary-button" type="submit">Create demo account</button>
+          </form>
+        </div>
+
+        <p id="authError" class="auth-error" hidden></p>
+      </div>
+    </section>
+
+    <main id="appShell" class="app-shell" hidden>
+      <aside class="sidebar">
+        <div class="brand">
+          <span class="brand-mark">B</span>
+          <div>
+            <p class="eyebrow">Hackathon MVP</p>
+            <h1>Bole</h1>
+            <p class="brand-subtitle">Your personal job search assistant with long-term memory</p>
+          </div>
+        </div>
+
+        <section class="panel account-panel">
+          <div class="panel-heading">
+            <h2>Account</h2>
+            <button id="logoutButton" class="text-button" type="button">Logout</button>
+          </div>
+          <p id="currentUser" class="current-user"></p>
+        </section>
+
+        <section class="panel input-panel">
+          <div class="panel-heading">
+            <h2>Resume</h2>
+            <label class="file-button">
+              <input id="resumeFile" type="file" accept=".pdf,.txt,.md,.text,application/pdf,text/plain,text/markdown">
+              Upload
+            </label>
+          </div>
+          <textarea id="resumeText" spellcheck="false" placeholder="Paste resume text"></textarea>
+        </section>
+
+        <section class="panel">
+          <div class="panel-heading">
+            <h2>Career Page</h2>
+          </div>
+          <input id="careerUrl" type="url" placeholder="https://company.com/careers">
+          <textarea id="jobsText" class="jobs-text" spellcheck="false" placeholder="Paste job descriptions if the site blocks fetching"></textarea>
+        </section>
+
+        <button id="analyzeButton" class="primary-button" type="button">
+          <span>Analyze fit</span>
+        </button>
+
+        <label class="toggle-row">
+          <input id="useLlm" type="checkbox" checked>
+          <span>Smarter recommendations</span>
+        </label>
+      </aside>
+
+      <section class="workspace">
+        <header class="workspace-header">
+          <div>
+            <p class="eyebrow workspace-eyebrow">Skill-based search</p>
+            <h2>Roles matched to your resume, preferences, and the actual JD</h2>
+          </div>
+          <div class="summary-strip">
+            <div>
+              <span id="skillCount">0</span>
+              <label>skills</label>
+            </div>
+            <div>
+              <span id="jobCount">0</span>
+              <label>jobs</label>
+            </div>
+          </div>
+        </header>
+
+        <section id="skillsPanel" class="skills-panel">
+          <h3>Core skills</h3>
+          <div id="skillsList" class="chips empty-state">Run analysis to extract resume skills.</div>
+        </section>
+
+        <section id="memoryPanel" class="memory-panel" hidden>
+          <div class="panel-heading">
+            <h3>Long-term memory</h3>
+            <span id="memoryBadge" class="memory-badge"></span>
+          </div>
+          <p id="memoryStatus"></p>
+          <div id="memoryContext" class="memory-context"></div>
+        </section>
+
+        <section id="profilePanel" class="profile-panel" hidden>
+          <h3>Candidate profile</h3>
+          <p id="profileHeadline"></p>
+          <div class="profile-grid">
+            <div>
+              <label>Strengths</label>
+              <div id="profileStrengths" class="chips"></div>
+            </div>
+            <div>
+              <label>Domains</label>
+              <div id="profileDomains" class="chips"></div>
+            </div>
+          </div>
+          <p id="profileStrategy"></p>
+        </section>
+
+        <section id="warnings" class="warnings" hidden></section>
+
+        <section id="results" class="results">
+          <div class="empty-board">
+            <div class="empty-graphic"></div>
+            <h3>Ready for your first match</h3>
+            <p>Bole ranks roles by skill evidence instead of title similarity.</p>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <template id="jobTemplate">
+      <article class="job-card">
+        <div class="score-hero">
+          <div class="score-ring">
+            <span class="score-value"></span>
+            <label>match</label>
+          </div>
+          <p class="score-label"></p>
+        </div>
+        <div class="job-main">
+          <div class="job-title-row">
+            <div>
+              <p class="job-kicker">Recommended role</p>
+              <h3 class="job-title"></h3>
+            </div>
+            <button class="job-link" type="button">Open</button>
+          </div>
+          <div class="fit-narrative">
+            <p class="why"></p>
+            <p class="llm-reason"></p>
+            <p class="pitch"></p>
+          </div>
+          <div class="feedback-row">
+            <button type="button" data-feedback="save">Save</button>
+            <button type="button" data-feedback="not_interested">Not interested</button>
+            <button type="button" data-feedback="applied">Applied</button>
+            <span class="feedback-status"></span>
+          </div>
+          <div class="distance-panel">
+            <div>
+              <label>Distance to JD</label>
+              <p class="distance-copy"></p>
+            </div>
+            <div class="distance-meter"><span></span></div>
+          </div>
+          <div class="insight-grid">
+            <div class="insight-card">
+              <label>Resume evidence</label>
+              <div class="matched chips"></div>
+            </div>
+            <div class="insight-card gap-card">
+              <label>Skill gaps</label>
+              <div class="gap-summary"></div>
+              <div class="missing chips"></div>
+            </div>
+            <div class="insight-card">
+              <label>Things to review</label>
+              <div class="risks chips"></div>
+            </div>
+          </div>
+          <div class="comparison-grid">
+            <div>
+              <label>Resume evidence</label>
+              <p class="resume-evidence-copy"></p>
+            </div>
+            <div>
+              <label>JD requirement</label>
+              <p class="jd-requirement-copy"></p>
+            </div>
+          </div>
+          <div class="action-plan" hidden>
+            <h4></h4>
+            <p class="resume-action"></p>
+            <ul></ul>
+          </div>
+          <div class="evidence"></div>
+        </div>
+      </article>
+    </template>
+
+    <script src="/app.js"></script>
+  </body>
+</html>
