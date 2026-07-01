@@ -1,5 +1,6 @@
 const authView = document.querySelector("#authView");
 const appShell = document.querySelector("#appShell");
+const sidebarResizeHandle = document.querySelector("#sidebarResizeHandle");
 const loginForm = document.querySelector("#loginForm");
 const signupForm = document.querySelector("#signupForm");
 const loginEmail = document.querySelector("#loginEmail");
@@ -10,6 +11,10 @@ const logoutButton = document.querySelector("#logoutButton");
 const resumeText = document.querySelector("#resumeText");
 const resumeFile = document.querySelector("#resumeFile");
 const careerUrl = document.querySelector("#careerUrl");
+const targetIntent = document.querySelector("#targetIntent");
+const voiceButton = document.querySelector("#voiceButton");
+const voiceButtonLabel = document.querySelector("#voiceButtonLabel");
+const voiceStatus = document.querySelector("#voiceStatus");
 const jobsText = document.querySelector("#jobsText");
 const analyzeButton = document.querySelector("#analyzeButton");
 const useLlm = document.querySelector("#useLlm");
@@ -29,8 +34,15 @@ const skillCount = document.querySelector("#skillCount");
 const jobCount = document.querySelector("#jobCount");
 const jobTemplate = document.querySelector("#jobTemplate");
 let activeUser = loadUser();
+let speechRecognition = null;
+let isListening = false;
+let mediaRecorder = null;
+let audioChunks = [];
+let voiceMode = "unsupported";
 
 renderAuthState();
+setupVoiceInput();
+setupSidebarResize();
 
 loginForm.addEventListener("submit", (event) => {
   event.preventDefault();
@@ -88,6 +100,7 @@ analyzeButton.addEventListener("click", async () => {
         user_id: activeUser?.id || "",
         resume_text: resumeText.value,
         career_url: careerUrl.value,
+        target_intent: targetIntent.value,
         jobs_text: jobsText.value,
         use_llm: useLlm.checked,
       }),
@@ -123,6 +136,230 @@ function renderAuthState() {
   authView.hidden = isSignedIn;
   appShell.hidden = !isSignedIn;
   currentUser.textContent = activeUser?.label || "";
+}
+
+function setupVoiceInput() {
+  if (!voiceButton) return;
+
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition && navigator.mediaDevices?.getUserMedia && window.MediaRecorder) {
+    voiceMode = "recording";
+    voiceButton.addEventListener("click", toggleAudioRecording);
+    voiceStatus.textContent = "Click to record your target role. Bole will transcribe it with the server.";
+    return;
+  }
+
+  if (!SpeechRecognition) {
+    voiceButton.addEventListener("click", () => {
+      targetIntent.focus();
+      voiceStatus.textContent = "Voice input is not supported in this browser. Type your target role here.";
+    });
+    return;
+  }
+
+  voiceMode = "speech";
+  speechRecognition = new SpeechRecognition();
+  speechRecognition.continuous = false;
+  speechRecognition.interimResults = true;
+  speechRecognition.lang = navigator.language || "en-US";
+
+  speechRecognition.addEventListener("start", () => {
+    isListening = true;
+    voiceButton.classList.add("is-listening");
+    voiceButton.setAttribute("aria-pressed", "true");
+    voiceButtonLabel.textContent = "Listening";
+    voiceStatus.textContent = "Listening... describe your ideal role.";
+  });
+
+  speechRecognition.addEventListener("result", (event) => {
+    let finalTranscript = "";
+    let interimTranscript = "";
+
+    for (let index = event.resultIndex; index < event.results.length; index += 1) {
+      const transcript = event.results[index][0].transcript.trim();
+      if (event.results[index].isFinal) {
+        finalTranscript += `${transcript} `;
+      } else {
+        interimTranscript += `${transcript} `;
+      }
+    }
+
+    if (interimTranscript) {
+      voiceStatus.textContent = interimTranscript.trim();
+    }
+
+    if (finalTranscript.trim()) {
+      appendTargetIntent(finalTranscript.trim());
+    }
+  });
+
+  speechRecognition.addEventListener("error", (event) => {
+    const message = event.error === "not-allowed"
+      ? "Microphone permission was blocked. Allow microphone access or type your target role."
+      : "Voice input stopped. You can try again or type your target role.";
+    voiceStatus.textContent = message;
+  });
+
+  speechRecognition.addEventListener("end", () => {
+    isListening = false;
+    voiceButton.classList.remove("is-listening");
+    voiceButton.setAttribute("aria-pressed", "false");
+    voiceButtonLabel.textContent = "Voice input";
+    if (!targetIntent.value.trim()) {
+      voiceStatus.textContent = "Speak your target role to personalize ranking.";
+    }
+  });
+
+  voiceButton.addEventListener("click", () => {
+    if (isListening) {
+      speechRecognition.stop();
+      return;
+    }
+    try {
+      speechRecognition.start();
+    } catch {
+      voiceStatus.textContent = "Voice input is already starting. Try again in a moment.";
+    }
+  });
+}
+
+function setupSidebarResize() {
+  if (!appShell || !sidebarResizeHandle) return;
+
+  const savedWidth = Number(localStorage.getItem("bole_sidebar_width") || 0);
+  if (savedWidth) {
+    setSidebarWidth(savedWidth);
+  }
+
+  sidebarResizeHandle.addEventListener("pointerdown", (event) => {
+    if (window.matchMedia("(max-width: 900px)").matches) return;
+    event.preventDefault();
+    sidebarResizeHandle.setPointerCapture(event.pointerId);
+    appShell.classList.add("is-resizing");
+  });
+
+  sidebarResizeHandle.addEventListener("pointermove", (event) => {
+    if (!appShell.classList.contains("is-resizing")) return;
+    const bounds = appShell.getBoundingClientRect();
+    const width = event.clientX - bounds.left;
+    setSidebarWidth(width);
+  });
+
+  sidebarResizeHandle.addEventListener("pointerup", (event) => {
+    if (!appShell.classList.contains("is-resizing")) return;
+    sidebarResizeHandle.releasePointerCapture(event.pointerId);
+    appShell.classList.remove("is-resizing");
+    localStorage.setItem("bole_sidebar_width", String(getCurrentSidebarWidth()));
+  });
+
+  sidebarResizeHandle.addEventListener("pointercancel", () => {
+    appShell.classList.remove("is-resizing");
+  });
+
+  sidebarResizeHandle.addEventListener("keydown", (event) => {
+    if (window.matchMedia("(max-width: 900px)").matches) return;
+    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+    event.preventDefault();
+    const direction = event.key === "ArrowRight" ? 1 : -1;
+    setSidebarWidth(getCurrentSidebarWidth() + direction * 24);
+    localStorage.setItem("bole_sidebar_width", String(getCurrentSidebarWidth()));
+  });
+
+  sidebarResizeHandle.addEventListener("dblclick", () => {
+    localStorage.removeItem("bole_sidebar_width");
+    appShell.style.removeProperty("--sidebar-width");
+  });
+}
+
+function setSidebarWidth(width) {
+  const viewport = window.innerWidth || 1200;
+  const minWidth = 330;
+  const maxWidth = Math.min(820, Math.max(420, viewport - 460));
+  const nextWidth = Math.max(minWidth, Math.min(maxWidth, width));
+  appShell.style.setProperty("--sidebar-width", `${nextWidth}px`);
+}
+
+function getCurrentSidebarWidth() {
+  const value = getComputedStyle(appShell).getPropertyValue("--sidebar-width");
+  return Math.round(Number.parseFloat(value) || 0);
+}
+
+async function toggleAudioRecording() {
+  if (isListening && mediaRecorder) {
+    mediaRecorder.stop();
+    return;
+  }
+
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    audioChunks = [];
+    mediaRecorder = new MediaRecorder(stream);
+
+    mediaRecorder.addEventListener("dataavailable", (event) => {
+      if (event.data.size > 0) audioChunks.push(event.data);
+    });
+
+    mediaRecorder.addEventListener("stop", async () => {
+      stopMicrophoneTracks(stream);
+      isListening = false;
+      voiceButton.classList.remove("is-listening");
+      voiceButton.setAttribute("aria-pressed", "false");
+      voiceButtonLabel.textContent = "Voice input";
+      await transcribeRecordedAudio();
+    });
+
+    mediaRecorder.start();
+    isListening = true;
+    voiceButton.classList.add("is-listening");
+    voiceButton.setAttribute("aria-pressed", "true");
+    voiceButtonLabel.textContent = "Stop";
+    voiceStatus.textContent = "Recording... click Stop when finished.";
+  } catch {
+    voiceStatus.textContent = "Microphone permission was blocked. Allow access or type your target role.";
+    targetIntent.focus();
+  }
+}
+
+async function transcribeRecordedAudio() {
+  if (!audioChunks.length) {
+    voiceStatus.textContent = "No audio was captured. Try again or type your target role.";
+    return;
+  }
+
+  voiceButton.disabled = true;
+  voiceStatus.textContent = "Transcribing your target role...";
+
+  try {
+    const audioBlob = new Blob(audioChunks, { type: mediaRecorder?.mimeType || "audio/webm" });
+    const response = await fetch("/api/transcribe-voice", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        content_type: audioBlob.type || "audio/webm",
+        data: await fileToBase64(audioBlob),
+      }),
+    });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.error || "Could not transcribe voice input.");
+    appendTargetIntent(payload.text);
+  } catch (error) {
+    voiceStatus.textContent = error.message;
+  } finally {
+    voiceButton.disabled = false;
+    audioChunks = [];
+    mediaRecorder = null;
+  }
+}
+
+function stopMicrophoneTracks(stream) {
+  stream.getTracks().forEach((track) => track.stop());
+}
+
+function appendTargetIntent(transcript) {
+  const existing = targetIntent.value.trim();
+  targetIntent.value = existing ? `${existing}\n${transcript}` : transcript;
+  voiceStatus.textContent = "Added to target role preference.";
+  targetIntent.focus();
 }
 
 function showAuthError(message) {
@@ -174,6 +411,9 @@ function render(payload) {
     card.querySelector(".score-label").textContent = scoreLabel(displayScore);
     card.querySelector(".job-title").textContent = job.title;
     card.querySelector(".why").textContent = job.why;
+    card.querySelector(".intent-reason").textContent = job.intent_matches?.length
+      ? `Target preference match: ${job.intent_matches.slice(0, 4).join(", ")}`
+      : "";
     card.querySelector(".llm-reason").textContent = job.llm_reason || "";
     card.querySelector(".pitch").textContent = job.interview_pitch ? `Pitch: ${job.interview_pitch}` : "";
     renderDistance(card, job, displayScore);

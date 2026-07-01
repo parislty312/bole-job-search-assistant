@@ -71,6 +71,17 @@
             <h2>Career Page</h2>
           </div>
           <input id="careerUrl" type="url" placeholder="https://company.com/careers">
+          <div class="voice-input-card">
+            <label for="targetIntent">Target role</label>
+            <textarea id="targetIntent" class="target-intent" spellcheck="false" placeholder="Describe the role, company, location, or work style you want."></textarea>
+            <div class="voice-controls">
+              <button id="voiceButton" class="voice-button" type="button" aria-pressed="false">
+                <span class="voice-icon" aria-hidden="true"></span>
+                <span id="voiceButtonLabel">Voice input</span>
+              </button>
+              <span id="voiceStatus" class="voice-status" aria-live="polite">Speak your target role to personalize ranking.</span>
+            </div>
+          </div>
           <textarea id="jobsText" class="jobs-text" spellcheck="false" placeholder="Paste job descriptions if the site blocks fetching"></textarea>
         </section>
 
@@ -83,6 +94,14 @@
           <span>Smarter recommendations</span>
         </label>
       </aside>
+
+      <button
+        id="sidebarResizeHandle"
+        class="sidebar-resize-handle"
+        type="button"
+        aria-label="Resize input sidebar"
+        title="Drag to resize"
+      ></button>
 
       <section class="workspace">
         <header class="workspace-header">
@@ -163,6 +182,7 @@
           </div>
           <div class="fit-narrative">
             <p class="why"></p>
+            <p class="intent-reason"></p>
             <p class="llm-reason"></p>
             <p class="pitch"></p>
           </div>

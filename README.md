@@ -8,6 +8,7 @@ Bole reads a resume, scans a company career page or pasted job descriptions, and
 
 - Resume upload and preview, including PDF extraction
 - Career page/job description matching
+- Voice input for describing target roles and search preferences
 - Large match score and distance-to-JD explanations
 - Skill gap cards with severity labels
 - Resume evidence vs JD requirement comparison

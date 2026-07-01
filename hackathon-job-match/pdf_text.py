@@ -119,10 +119,107 @@ def unescape_pdf_string(value: str) -> str:
 
 def normalize_pdf_text(text: str) -> str:
     text = text.replace("\x00", "")
-    text = re.sub(r"([A-Za-z])\n([A-Za-z])", r"\1 \2", text)
+    text = re.sub(r"\r\n?", "\n", text)
+    text = re.sub(r"([A-Za-z])-\n([a-z])", r"\1\2", text)
     text = re.sub(r"[ \t]+", " ", text)
-    text = re.sub(r"\n{3,}", "\n\n", text)
-    return text.strip()
+
+    lines = [line.strip() for line in text.split("\n")]
+    lines = remove_fragment_blank_lines(lines)
+    return compact_resume_lines(lines)
+
+
+SECTION_HEADINGS = {
+    "summary",
+    "profile",
+    "experience",
+    "professional experience",
+    "work experience",
+    "education",
+    "skills",
+    "technical skills",
+    "projects",
+    "certifications",
+    "certification",
+    "publications",
+    "awards",
+    "leadership",
+}
+
+
+def remove_fragment_blank_lines(lines: list[str]) -> list[str]:
+    compacted = []
+    for index, line in enumerate(lines):
+        if line:
+            compacted.append(line)
+            continue
+
+        previous_line = next((item for item in reversed(lines[:index]) if item.strip()), "")
+        next_line = next((item for item in lines[index + 1 :] if item.strip()), "")
+        if is_fragment_line(previous_line) and is_fragment_line(next_line):
+            continue
+        if compacted and compacted[-1] == "":
+            continue
+        compacted.append("")
+    return compacted
+
+
+def compact_resume_lines(lines: list[str]) -> str:
+    blocks: list[str] = []
+    paragraph: list[str] = []
+
+    def flush_paragraph() -> None:
+        if not paragraph:
+            return
+        blocks.append(compact_paragraph(paragraph))
+        paragraph.clear()
+
+    for line in lines:
+        if not line:
+            flush_paragraph()
+            continue
+        if is_section_heading(line):
+            flush_paragraph()
+            blocks.append(line)
+            continue
+        paragraph.append(line)
+
+    flush_paragraph()
+    return "\n\n".join(block for block in blocks if block).strip()
+
+
+def compact_paragraph(lines: list[str]) -> str:
+    merged: list[str] = []
+    for line in lines:
+        if not merged:
+            merged.append(line)
+            continue
+        if starts_bullet(line):
+            merged.append(line)
+            continue
+        if starts_bullet(merged[-1]):
+            merged.append(line)
+            continue
+        if merged[-1].endswith(":"):
+            merged.append(line)
+            continue
+        merged[-1] = f"{merged[-1]} {line}"
+    return "\n".join(merged)
+
+
+def is_fragment_line(line: str) -> bool:
+    line = line.strip()
+    if not line or is_section_heading(line) or starts_bullet(line):
+        return False
+    return len(line) <= 45
+
+
+def is_section_heading(line: str) -> bool:
+    normalized = re.sub(r"[^a-z ]+", "", line.lower()).strip()
+    return normalized in SECTION_HEADINGS
+
+
+def starts_bullet(line: str) -> bool:
+    return bool(re.match(r"^([•*-]|\d+[.)])\s+", line.strip()))
 
 
 def is_readable_resume_text(text: str) -> bool:

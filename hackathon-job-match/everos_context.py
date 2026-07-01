@@ -34,6 +34,7 @@ def retrieve_user_preferences(
     *,
     resume_text: str,
     career_url: str = "",
+    target_intent: str = "",
 ) -> MemoryLookup:
     """Retrieve long-term job-search context from EverOS before analysis."""
 
@@ -54,7 +55,11 @@ def retrieve_user_preferences(
             warning=str(exc),
         )
 
-    query = build_memory_query(resume_text=resume_text, career_url=career_url)
+    query = build_memory_query(
+        resume_text=resume_text,
+        career_url=career_url,
+        target_intent=target_intent,
+    )
 
     try:
         memory = EverOSMemory()
@@ -229,8 +234,14 @@ def remember_job_feedback(
     )
 
 
-def build_memory_query(*, resume_text: str, career_url: str = "") -> str:
+def build_memory_query(
+    *,
+    resume_text: str,
+    career_url: str = "",
+    target_intent: str = "",
+) -> str:
     resume_hint = " ".join(resume_text.split())[:900]
+    target_hint = " ".join(target_intent.split())[:500]
     parts = [
         "Recall this user's long-term job search preferences, target companies,",
         "preferred roles, rejected role patterns, location or remote preferences,",
@@ -238,6 +249,8 @@ def build_memory_query(*, resume_text: str, career_url: str = "") -> str:
     ]
     if career_url:
         parts.append(f"Current company career page: {career_url}.")
+    if target_hint:
+        parts.append(f"Current voice or typed target role preference: {target_hint}.")
     if resume_hint:
         parts.append(f"Current resume summary text: {resume_hint}")
     return " ".join(parts)

@@ -10,6 +10,7 @@
   --gold: #c5902f;
   --blue: #4267b2;
   --shadow: 0 20px 70px rgba(31, 45, 61, 0.13);
+  --sidebar-width: clamp(360px, 38vw, 760px);
 }
 
 * {
@@ -100,7 +101,7 @@ textarea {
 
 .app-shell {
   display: grid;
-  grid-template-columns: minmax(330px, 390px) 1fr;
+  grid-template-columns: minmax(330px, var(--sidebar-width)) 10px minmax(420px, 1fr);
   min-height: 100vh;
 }
 
@@ -110,7 +111,42 @@ textarea {
   gap: 16px;
   padding: 24px;
   background: #eef5f3;
+  min-width: 0;
+}
+
+.sidebar-resize-handle {
+  position: relative;
+  width: 10px;
+  min-height: 100vh;
+  border: 0;
+  border-left: 1px solid var(--line);
   border-right: 1px solid var(--line);
+  background: #edf3f7;
+  cursor: col-resize;
+}
+
+.sidebar-resize-handle::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 3px;
+  height: 54px;
+  border-radius: 999px;
+  background: #b8c6d4;
+  transform: translate(-50%, -50%);
+}
+
+.sidebar-resize-handle:hover,
+.sidebar-resize-handle:focus-visible,
+.app-shell.is-resizing .sidebar-resize-handle {
+  background: #dfe9ef;
+  outline: none;
+}
+
+.app-shell.is-resizing {
+  cursor: col-resize;
+  user-select: none;
 }
 
 .brand {
@@ -222,12 +258,96 @@ textarea {
   min-height: 210px;
   resize: vertical;
   padding: 12px;
-  line-height: 1.5;
+  font-size: 14px;
+  line-height: 1.42;
 }
 
 .jobs-text {
   min-height: 110px;
   margin-top: 10px;
+}
+
+.voice-input-card {
+  margin-top: 10px;
+  padding: 12px;
+  border: 1px solid #d8e2e6;
+  border-radius: 16px;
+  background: #f6faf9;
+}
+
+.voice-input-card label {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.target-intent {
+  min-height: 74px;
+  background: #ffffff;
+}
+
+.voice-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.voice-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-width: 132px;
+  min-height: 40px;
+  border: 0;
+  border-radius: 999px;
+  padding: 0 16px;
+  background: var(--ink);
+  color: #ffffff;
+  font-weight: 800;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.voice-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.voice-button.is-listening {
+  background: #d64f3f;
+}
+
+.voice-icon {
+  width: 9px;
+  height: 14px;
+  border: 2px solid currentColor;
+  border-radius: 999px;
+  position: relative;
+}
+
+.voice-icon::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -7px;
+  width: 12px;
+  height: 7px;
+  border-bottom: 2px solid currentColor;
+  border-left: 2px solid currentColor;
+  border-right: 2px solid currentColor;
+  border-radius: 0 0 999px 999px;
+  transform: translateX(-50%);
+}
+
+.voice-status {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
 }
 
 input[type="url"],
@@ -841,6 +961,10 @@ label {
 
   .app-shell {
     grid-template-columns: 1fr;
+  }
+
+  .sidebar-resize-handle {
+    display: none;
   }
 
   .sidebar {

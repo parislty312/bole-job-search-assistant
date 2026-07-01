@@ -42,7 +42,29 @@ JOB_TITLE_HINTS = (
     "intern",
     "specialist",
     "consultant",
+    "director",
 )
+
+INTENT_STOPWORDS = {
+    "about",
+    "and",
+    "are",
+    "for",
+    "from",
+    "job",
+    "jobs",
+    "like",
+    "looking",
+    "role",
+    "roles",
+    "search",
+    "that",
+    "the",
+    "this",
+    "want",
+    "with",
+    "work",
+}
 
 
 @dataclass(frozen=True)
@@ -103,11 +125,29 @@ class TextExtractor(HTMLParser):
         return normalize_lines("\n".join(self.parts))
 
 
-def analyze_fit(resume_text: str, page_text: str, source_url: str = "") -> dict[str, Any]:
+def analyze_fit(
+    resume_text: str,
+    page_text: str,
+    source_url: str = "",
+    target_intent: str = "",
+) -> dict[str, Any]:
     resume_skills = extract_skills(resume_text)
+    target_skills = extract_skills(target_intent)
+    target_terms = extract_intent_terms(target_intent)
     jobs = extract_jobs(page_text, source_url=source_url)
-    recommendations = [score_job(job, resume_skills) for job in jobs]
-    recommendations.sort(key=lambda item: (item["score"], len(item["matched_skills"])), reverse=True)
+    recommendations = [
+        score_job(
+            job,
+            resume_skills,
+            target_skills=target_skills,
+            target_terms=target_terms,
+        )
+        for job in jobs
+    ]
+    recommendations.sort(
+        key=lambda item: (item["score"], len(item["intent_matches"]), len(item["matched_skills"])),
+        reverse=True,
+    )
 
     warnings: list[str] = []
     if not jobs:
@@ -199,12 +239,24 @@ def jobs_from_text_blocks(
     ]
 
 
-def score_job(job: JobPosting, resume_skills: list[str]) -> dict[str, Any]:
+def score_job(
+    job: JobPosting,
+    resume_skills: list[str],
+    *,
+    target_skills: list[str] | None = None,
+    target_terms: set[str] | None = None,
+) -> dict[str, Any]:
     job_skills = extract_skills(job.description)
     matched = sorted(set(resume_skills).intersection(job_skills))
     missing = sorted(set(job_skills).difference(resume_skills))
     resume_set = set(resume_skills)
     job_set = set(job_skills)
+    intent_matches, intent_bonus = calculate_intent_boost(
+        job,
+        job_skills=job_skills,
+        target_skills=target_skills or [],
+        target_terms=target_terms or set(),
+    )
 
     if not job_set:
         overlap_score = 20 if any(token in normalize_for_match(job.description) for token in resume_set) else 8
@@ -212,7 +264,7 @@ def score_job(job: JobPosting, resume_skills: list[str]) -> dict[str, Any]:
         overlap_score = round(100 * len(resume_set.intersection(job_set)) / max(len(job_set), 1))
 
     seniority_penalty = seniority_mismatch_penalty(job.description, resume_skills)
-    score = max(0, min(100, overlap_score - seniority_penalty))
+    score = max(0, min(100, overlap_score - seniority_penalty + intent_bonus))
 
     return {
         "title": job.title,
@@ -221,6 +273,7 @@ def score_job(job: JobPosting, resume_skills: list[str]) -> dict[str, Any]:
         "matched_skills": matched,
         "missing_skills": missing[:6],
         "job_skills": job_skills,
+        "intent_matches": intent_matches,
         "why": build_reason(score, matched, missing),
         "recommendation": build_action_recommendation(
             score=score,
@@ -230,6 +283,43 @@ def score_job(job: JobPosting, resume_skills: list[str]) -> dict[str, Any]:
         ),
         "evidence": evidence_snippets(job.description, matched or job_skills),
     }
+
+
+def extract_intent_terms(text: str) -> set[str]:
+    normalized = normalize_for_match(text)
+    return {
+        token
+        for token in re.findall(r"[a-z0-9]+", normalized)
+        if len(token) >= 2 and token not in INTENT_STOPWORDS
+    }
+
+
+def calculate_intent_boost(
+    job: JobPosting,
+    *,
+    job_skills: list[str],
+    target_skills: list[str],
+    target_terms: set[str],
+) -> tuple[list[str], int]:
+    if not target_skills and not target_terms:
+        return [], 0
+
+    title = normalize_for_match(job.title)
+    description = normalize_for_match(job.description)
+    skill_hits = sorted(set(target_skills).intersection(job_skills))
+    title_hits = sorted(term for term in target_terms if contains_phrase(title, term))
+    description_hits = sorted(
+        term
+        for term in target_terms
+        if term not in title_hits and contains_phrase(description, term)
+    )
+
+    bonus = min(12, len(skill_hits) * 4)
+    bonus += min(24, len(title_hits) * 7)
+    bonus += min(6, len(description_hits) * 1)
+
+    matches = [*skill_hits, *title_hits[:4], *description_hits[:3]]
+    return matches[:8], bonus
 
 
 def build_reason(score: int, matched: list[str], missing: list[str]) -> str:
@@ -380,6 +470,9 @@ def find_matching_job_url(
 
 
 def is_probable_job_title(text: str) -> bool:
+    raw_title = normalize_space(text)
+    if len(raw_title) > 140:
+        return False
     title = clean_title(text)
     lower = title.lower()
     if len(title) < 4 or len(title) > 95:

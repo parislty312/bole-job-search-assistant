@@ -24,6 +24,7 @@ def analyze_with_llm(
     recommendations: list[dict[str, Any]],
     *,
     memory_context: str = "",
+    target_intent: str = "",
     model: str | None = None,
 ) -> dict[str, Any]:
     """Use an LLM to understand resume context and refine job recommendations."""
@@ -45,6 +46,7 @@ def analyze_with_llm(
             resume_text,
             recommendations,
             memory_context=memory_context,
+            target_intent=target_intent,
         ),
     }
 
@@ -59,6 +61,7 @@ def build_prompt(
     recommendations: list[dict[str, Any]],
     *,
     memory_context: str = "",
+    target_intent: str = "",
 ) -> str:
     compact_jobs = []
     for job in recommendations[:12]:
@@ -80,6 +83,7 @@ def build_prompt(
                 "seniority, transferable skills, missing-but-learnable gaps, and "
                 "the user's long-term job-search preferences when available."
             ),
+            "current_target_role_preference": target_intent[:2_000],
             "long_term_memory": {
                 "source": "EverOS",
                 "usage_policy": (
