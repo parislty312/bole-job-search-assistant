@@ -383,10 +383,11 @@ function render(payload) {
   renderSkills(payload.resume_skills || []);
   renderMemory(payload.memory);
   renderProfile(payload.candidate_profile);
-  jobCount.textContent = payload.job_count || 0;
   showWarnings(payload.warnings || []);
 
   const recommendations = payload.recommendations || [];
+  const totalJobs = payload.job_count || 0;
+  jobCount.textContent = totalJobs ? `${recommendations.length}/${totalJobs}` : "0";
   results.innerHTML = "";
 
   if (!recommendations.length) {
@@ -408,6 +409,7 @@ function render(payload) {
     const displayScore = job.llm_score || job.score;
     card.querySelector(".score-value").textContent = `${displayScore}`;
     card.querySelector(".score-ring").style.setProperty("--score", `${displayScore}%`);
+    card.querySelector(".score-ring").style.setProperty("--score-color", scoreColor(displayScore));
     card.querySelector(".score-label").textContent = scoreLabel(displayScore);
     card.querySelector(".job-title").textContent = job.title;
     card.querySelector(".why").textContent = job.why;
@@ -453,6 +455,12 @@ function scoreLabel(score) {
   if (score >= 55) return "Close match";
   if (score >= 35) return "Stretch";
   return "Low fit";
+}
+
+function scoreColor(score) {
+  if (score > 70) return "#4a913f";
+  if (score >= 50) return "#d7a629";
+  return "#d9534f";
 }
 
 function renderDistance(card, job, score) {

@@ -72,6 +72,28 @@ class MatcherTests(unittest.TestCase):
         self.assertEqual(result["recommendations"][0]["title"], "AI Product Manager")
         self.assertIn("Product", result["recommendations"][0]["intent_matches"])
 
+    def test_recommendations_keep_non_perfect_score_examples(self):
+        perfect_jobs = "\n\n".join(
+            f"""
+            AI Engineer {index}
+            Build Python SQL LLM systems for cloud analytics and agent workflows.
+            """
+            for index in range(14)
+        )
+        jobs = f"""
+        {perfect_jobs}
+
+        Product Designer
+        Create visual prototypes, user research plans, and design systems.
+        """
+
+        result = analyze_fit("Python SQL LLM Cloud Analytics", jobs)
+        titles = [item["title"] for item in result["recommendations"]]
+
+        self.assertLessEqual(len(result["recommendations"]), 12)
+        self.assertIn("Product Designer", titles)
+        self.assertTrue(any(item["score"] < 50 for item in result["recommendations"]))
+
     def test_analyze_fit_keeps_source_url_for_open_fallback(self):
         result = analyze_fit(
             "Python SQL",

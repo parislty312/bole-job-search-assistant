@@ -159,9 +159,49 @@ def analyze_fit(
         "resume_skills": resume_skills,
         "source_url": source_url,
         "job_count": len(jobs),
-        "recommendations": recommendations[:12],
+        "recommendations": select_recommendations(recommendations),
         "warnings": warnings,
     }
+
+
+def select_recommendations(
+    recommendations: list[dict[str, Any]],
+    *,
+    limit: int = 12,
+) -> list[dict[str, Any]]:
+    if len(recommendations) <= limit:
+        return recommendations
+
+    selected: list[dict[str, Any]] = []
+    seen: set[tuple[str, str]] = set()
+
+    def add(item: dict[str, Any]) -> bool:
+        if len(selected) >= limit:
+            return False
+        key = (str(item.get("title", "")), str(item.get("url", "")))
+        if key in seen:
+            return False
+        seen.add(key)
+        selected.append(item)
+        return True
+
+    for item in recommendations[:8]:
+        add(item)
+
+    score_bands = [
+        lambda score: 70 <= score < 100,
+        lambda score: 50 <= score < 70,
+        lambda score: score < 50,
+    ]
+    for matches_band in score_bands:
+        for item in recommendations:
+            if matches_band(int(item.get("score", 0))) and add(item):
+                break
+
+    for item in recommendations:
+        add(item)
+
+    return selected
 
 
 def extract_skills(text: str) -> list[str]:

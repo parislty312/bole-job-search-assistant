@@ -474,7 +474,7 @@ input[type="email"] {
 
 .summary-strip {
   display: grid;
-  grid-template-columns: repeat(2, 92px);
+  grid-template-columns: repeat(2, 104px);
   overflow: hidden;
   border: 1px solid var(--line);
   border-radius: 24px;
@@ -493,10 +493,11 @@ input[type="email"] {
 .summary-strip span {
   display: block;
   color: #111827;
-  font-size: 25px;
+  font-size: 24px;
   font-weight: 900;
   line-height: 1;
   margin-bottom: 7px;
+  white-space: nowrap;
 }
 
 .summary-strip label {
@@ -672,6 +673,7 @@ label {
 
 .score-ring {
   --score: 0%;
+  --score-color: var(--green);
   display: grid;
   width: 118px;
   height: 118px;
@@ -680,7 +682,7 @@ label {
   border-radius: 50%;
   background:
     radial-gradient(circle at center, #fff 0 56%, transparent 57%),
-    conic-gradient(var(--green) var(--score), #e6ebef 0);
+    conic-gradient(var(--score-color) var(--score), #e6ebef 0);
 }
 
 .score-ring span {
