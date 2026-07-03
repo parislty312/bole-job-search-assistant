@@ -618,24 +618,26 @@ label {
 
 .results {
   display: grid;
-  gap: 14px;
+  gap: 16px;
 }
 
 .results-pager {
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 14px;
+  justify-content: space-between;
+  gap: 16px;
   margin: 18px 0 6px;
-  padding: 12px;
+  padding: 10px 12px;
   border: 1px solid var(--line);
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.78);
+  border-radius: 20px;
+  background: #ffffff;
+  box-shadow: 0 10px 28px rgba(31, 45, 61, 0.08);
 }
 
 .results-pager button {
   min-height: 36px;
-  padding: 0 15px;
+  min-width: 92px;
+  padding: 0 16px;
   border: 1px solid #cbd5df;
   border-radius: 999px;
   color: #344250;
@@ -657,7 +659,7 @@ label {
 }
 
 .results-pager span {
-  min-width: 220px;
+  min-width: 260px;
   color: var(--muted);
   font-size: 13px;
   font-weight: 800;
@@ -671,9 +673,10 @@ label {
   align-content: center;
   gap: 12px;
   border: 1px dashed #cbd5df;
-  border-radius: 24px;
+  border-radius: 22px;
   background: #fff;
   text-align: center;
+  box-shadow: 0 10px 32px rgba(31, 45, 61, 0.06);
 }
 
 .empty-graphic {
@@ -694,32 +697,32 @@ label {
 
 .job-card {
   display: grid;
-  grid-template-columns: 150px 1fr;
-  gap: 24px;
-  padding: 22px;
-  border: 1px solid rgba(221, 229, 238, 0.95);
-  border-radius: 26px;
-  background: linear-gradient(180deg, #ffffff 0%, #fbfcff 100%);
-  box-shadow: var(--shadow);
+  grid-template-columns: 132px minmax(0, 1fr);
+  gap: 22px;
+  padding: 18px;
+  border: 1px solid #dfe7ef;
+  border-radius: 18px;
+  background: #ffffff;
+  box-shadow: 0 14px 42px rgba(31, 45, 61, 0.09);
 }
 
 .score-hero {
   display: grid;
   align-content: start;
   justify-items: center;
-  gap: 12px;
-  padding: 16px 12px;
-  border: 1px solid #e7edf4;
-  border-radius: 22px;
-  background: #f8fbff;
+  gap: 10px;
+  padding: 14px 10px;
+  border: 1px solid #e4ebf2;
+  border-radius: 16px;
+  background: #f8fafc;
 }
 
 .score-ring {
   --score: 0%;
   --score-color: var(--green);
   display: grid;
-  width: 118px;
-  height: 118px;
+  width: 104px;
+  height: 104px;
   place-items: center;
   align-content: center;
   border-radius: 50%;
@@ -729,7 +732,7 @@ label {
 }
 
 .score-ring span {
-  font-size: 34px;
+  font-size: 30px;
   font-weight: 900;
 }
 
@@ -740,7 +743,7 @@ label {
 .score-label {
   margin: 0;
   color: var(--ink);
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 850;
   text-align: center;
 }
@@ -751,7 +754,7 @@ label {
 
 .job-title {
   margin-bottom: 0;
-  font-size: 24px;
+  font-size: 22px;
   line-height: 1.15;
 }
 
@@ -766,7 +769,8 @@ label {
 .job-link {
   flex: 0 0 auto;
   border: 0;
-  padding: 8px 13px;
+  min-height: 36px;
+  padding: 0 14px;
   border-radius: 999px;
   background: #edf2ff;
   color: var(--blue);
@@ -783,11 +787,50 @@ label {
 
 .fit-narrative {
   display: grid;
+  gap: 7px;
+  margin: 12px 0;
+  padding: 13px;
+  border: 1px solid #e8eef4;
+  border-radius: 16px;
+  background: #f8fafc;
+}
+
+.job-meta-row {
+  display: flex;
+  flex-wrap: wrap;
   gap: 8px;
-  margin: 14px 0;
-  padding: 14px;
-  border-radius: 18px;
-  background: #f7fafc;
+  margin-bottom: 2px;
+}
+
+.match-badge,
+.role-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 9px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.match-badge[data-tone="success"] {
+  color: #185f5a;
+  background: #e7f5f2;
+}
+
+.match-badge[data-tone="warning"] {
+  color: #7c5520;
+  background: #fff4d8;
+}
+
+.match-badge[data-tone="danger"] {
+  color: #7f3448;
+  background: #fff0f3;
+}
+
+.role-badge {
+  color: #35518f;
+  background: #edf2ff;
 }
 
 .insight-grid {
@@ -804,9 +847,9 @@ label {
 
 .insight-card,
 .comparison-grid > div {
-  padding: 13px;
+  padding: 12px;
   border: 1px solid #e3eaf2;
-  border-radius: 18px;
+  border-radius: 14px;
   background: #fff;
 }
 
@@ -850,13 +893,14 @@ label {
   gap: 18px;
   margin-bottom: 14px;
   padding: 14px;
-  border-radius: 18px;
-  background: #111827;
+  border: 1px solid #dfe7ef;
+  border-radius: 16px;
+  background: #f8fafc;
 }
 
 .distance-panel label,
 .distance-panel p {
-  color: #fff;
+  color: var(--ink);
 }
 
 .distance-copy {
@@ -868,14 +912,14 @@ label {
   height: 12px;
   overflow: hidden;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.18);
+  background: #e6ebef;
 }
 
 .distance-meter span {
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: linear-gradient(90deg, #74d6c9, #b9e769);
+  background: linear-gradient(90deg, #6bbeb4, #9ecf6f);
 }
 
 .comparison-grid {
@@ -992,8 +1036,9 @@ label {
 .evidence p {
   margin: 0;
   padding: 10px 12px;
+  border: 1px solid #dfece9;
   border-left: 4px solid var(--mint);
-  border-radius: 0 14px 14px 0;
+  border-radius: 12px;
   background: #f6faf9;
   color: #344250;
   line-height: 1.45;
@@ -1031,6 +1076,21 @@ label {
   .sidebar,
   .workspace {
     padding: 16px;
+  }
+
+  .results-pager {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .results-pager span {
+    grid-column: 1 / -1;
+    grid-row: 1;
+    min-width: 0;
+  }
+
+  .results-pager button {
+    width: 100%;
   }
 
   .job-card,

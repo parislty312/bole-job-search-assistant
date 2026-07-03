@@ -1,0 +1,9 @@
+{
+	"dependencies": {
+		"@astryxdesign/core": "^0.1.2",
+		"@astryxdesign/theme-neutral": "^0.1.2"
+	},
+	"devDependencies": {
+		"@astryxdesign/cli": "^0.1.2"
+	}
+}

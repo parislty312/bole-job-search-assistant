@@ -445,6 +445,7 @@ function renderCurrentResultsPage() {
     card.querySelector(".score-ring").style.setProperty("--score", `${displayScore}%`);
     card.querySelector(".score-ring").style.setProperty("--score-color", scoreColor(displayScore));
     card.querySelector(".score-label").textContent = scoreLabel(displayScore);
+    renderMatchBadges(card, job, displayScore);
     card.querySelector(".job-title").textContent = job.title;
     card.querySelector(".why").textContent = job.why;
     card.querySelector(".intent-reason").textContent = job.intent_matches?.length
@@ -514,6 +515,27 @@ function scoreColor(score) {
   if (score > 70) return "#4a913f";
   if (score >= 50) return "#d7a629";
   return "#d9534f";
+}
+
+function scoreTone(score) {
+  if (score > 70) return "success";
+  if (score >= 50) return "warning";
+  return "danger";
+}
+
+function renderMatchBadges(card, job, score) {
+  const matchBadge = card.querySelector(".match-badge");
+  const roleBadge = card.querySelector(".role-badge");
+  matchBadge.textContent = scoreLabel(score);
+  matchBadge.dataset.tone = scoreTone(score);
+
+  const roleMatches = job.role_matches || [];
+  if (roleMatches.length) {
+    roleBadge.textContent = `Role aligned: ${roleMatches.slice(0, 2).join(", ")}`;
+    roleBadge.hidden = false;
+  } else {
+    roleBadge.hidden = true;
+  }
 }
 
 function renderDistance(card, job, score) {
