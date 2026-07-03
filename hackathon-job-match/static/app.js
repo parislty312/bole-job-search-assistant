@@ -33,7 +33,15 @@ const profileStrategy = document.querySelector("#profileStrategy");
 const skillCount = document.querySelector("#skillCount");
 const jobCount = document.querySelector("#jobCount");
 const jobTemplate = document.querySelector("#jobTemplate");
+const resultsPager = document.querySelector("#resultsPager");
+const prevPageButton = document.querySelector("#prevPageButton");
+const nextPageButton = document.querySelector("#nextPageButton");
+const pageStatus = document.querySelector("#pageStatus");
+const RESULTS_PER_PAGE = 6;
+const MAX_RESULT_PAGES = 10;
 let activeUser = loadUser();
+let latestPayload = null;
+let currentResultsPage = 1;
 let speechRecognition = null;
 let isListening = false;
 let mediaRecorder = null;
@@ -43,6 +51,19 @@ let voiceMode = "unsupported";
 renderAuthState();
 setupVoiceInput();
 setupSidebarResize();
+
+prevPageButton?.addEventListener("click", () => {
+  if (currentResultsPage <= 1) return;
+  currentResultsPage -= 1;
+  renderCurrentResultsPage();
+});
+
+nextPageButton?.addEventListener("click", () => {
+  const pageCount = getResultPageCount();
+  if (currentResultsPage >= pageCount) return;
+  currentResultsPage += 1;
+  renderCurrentResultsPage();
+});
 
 loginForm.addEventListener("submit", (event) => {
   event.preventDefault();
@@ -380,17 +401,25 @@ function normalizeUsername(value) {
 }
 
 function render(payload) {
+  latestPayload = payload;
+  currentResultsPage = 1;
   renderSkills(payload.resume_skills || []);
   renderMemory(payload.memory);
   renderProfile(payload.candidate_profile);
   showWarnings(payload.warnings || []);
+  renderCurrentResultsPage();
+}
 
-  const recommendations = payload.recommendations || [];
+function renderCurrentResultsPage() {
+  const payload = latestPayload || {};
+  const recommendations = (payload.recommendations || []).slice(0, RESULTS_PER_PAGE * MAX_RESULT_PAGES);
   const totalJobs = payload.job_count || 0;
   jobCount.textContent = totalJobs ? `${recommendations.length}/${totalJobs}` : "0";
   results.innerHTML = "";
+  renderPager(recommendations.length);
 
   if (!recommendations.length) {
+    if (resultsPager) resultsPager.hidden = true;
     results.innerHTML = `
       <div class="empty-board">
         <div class="empty-graphic"></div>
@@ -401,7 +430,12 @@ function render(payload) {
     return;
   }
 
-  recommendations.forEach((job) => {
+  const pageCount = getResultPageCount();
+  currentResultsPage = Math.min(Math.max(currentResultsPage, 1), pageCount);
+  const start = (currentResultsPage - 1) * RESULTS_PER_PAGE;
+  const pageRecommendations = recommendations.slice(start, start + RESULTS_PER_PAGE);
+
+  pageRecommendations.forEach((job) => {
     const card = jobTemplate.content.firstElementChild.cloneNode(true);
     card.__job = job;
     const jobUrl = job.url || payload.source_url || "";
@@ -447,6 +481,25 @@ function render(payload) {
 
     results.appendChild(card);
   });
+}
+
+function getResultPageCount() {
+  const total = Math.min(
+    latestPayload?.recommendations?.length || 0,
+    RESULTS_PER_PAGE * MAX_RESULT_PAGES,
+  );
+  return Math.max(1, Math.ceil(total / RESULTS_PER_PAGE));
+}
+
+function renderPager(resultCount) {
+  if (!resultsPager || !pageStatus || !prevPageButton || !nextPageButton) return;
+  const pageCount = Math.max(1, Math.ceil(resultCount / RESULTS_PER_PAGE));
+  resultsPager.hidden = resultCount <= RESULTS_PER_PAGE;
+  const start = resultCount ? (currentResultsPage - 1) * RESULTS_PER_PAGE + 1 : 0;
+  const end = Math.min(currentResultsPage * RESULTS_PER_PAGE, resultCount);
+  pageStatus.textContent = `Page ${currentResultsPage} of ${pageCount} · Showing ${start}-${end} of ${resultCount}`;
+  prevPageButton.disabled = currentResultsPage <= 1;
+  nextPageButton.disabled = currentResultsPage >= pageCount;
 }
 
 function scoreLabel(score) {

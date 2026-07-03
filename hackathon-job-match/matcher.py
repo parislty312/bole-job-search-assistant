@@ -45,6 +45,44 @@ JOB_TITLE_HINTS = (
     "director",
 )
 
+ROLE_ALIASES: dict[str, tuple[str, ...]] = {
+    "Technical Program Manager": (
+        "technical program manager",
+        "tpm",
+    ),
+    "Product Manager": (
+        "product manager",
+        "group product manager",
+    ),
+    "Engineering Manager": (
+        "engineering manager",
+        "software engineering manager",
+    ),
+    "Software Engineer": (
+        "software engineer",
+        "software developer",
+    ),
+    "Research Engineer": (
+        "research engineer",
+        "research scientist",
+    ),
+    "Data Scientist": (
+        "data scientist",
+        "machine learning scientist",
+    ),
+}
+
+ROLE_MISMATCH_TITLE_HINTS = (
+    "accountant",
+    "analyst",
+    "designer",
+    "engineer",
+    "manager",
+    "researcher",
+    "scientist",
+    "specialist",
+)
+
 INTENT_STOPWORDS = {
     "about",
     "and",
@@ -132,6 +170,7 @@ def analyze_fit(
     target_intent: str = "",
 ) -> dict[str, Any]:
     resume_skills = extract_skills(resume_text)
+    resume_roles = extract_role_terms(resume_text)
     target_skills = extract_skills(target_intent)
     target_terms = extract_intent_terms(target_intent)
     jobs = extract_jobs(page_text, source_url=source_url)
@@ -139,13 +178,19 @@ def analyze_fit(
         score_job(
             job,
             resume_skills,
+            resume_roles=resume_roles,
             target_skills=target_skills,
             target_terms=target_terms,
         )
         for job in jobs
     ]
     recommendations.sort(
-        key=lambda item: (item["score"], len(item["intent_matches"]), len(item["matched_skills"])),
+        key=lambda item: (
+            item["score"],
+            len(item["role_matches"]),
+            len(item["intent_matches"]),
+            len(item["matched_skills"]),
+        ),
         reverse=True,
     )
 
@@ -167,26 +212,20 @@ def analyze_fit(
 def select_recommendations(
     recommendations: list[dict[str, Any]],
     *,
-    limit: int = 12,
+    limit: int = 60,
 ) -> list[dict[str, Any]]:
     if len(recommendations) <= limit:
         return recommendations
 
-    selected: list[dict[str, Any]] = []
-    seen: set[tuple[str, str]] = set()
+    selected = recommendations[:limit]
+    if any(int(item.get("score", 0)) < 100 for item in selected):
+        return selected
 
-    def add(item: dict[str, Any]) -> bool:
-        if len(selected) >= limit:
-            return False
-        key = (str(item.get("title", "")), str(item.get("url", "")))
-        if key in seen:
-            return False
-        seen.add(key)
-        selected.append(item)
-        return True
-
-    for item in recommendations[:8]:
-        add(item)
+    diverse: list[dict[str, Any]] = []
+    selected_keys = {
+        (str(item.get("title", "")), str(item.get("url", "")))
+        for item in selected
+    }
 
     score_bands = [
         lambda score: 70 <= score < 100,
@@ -195,13 +234,18 @@ def select_recommendations(
     ]
     for matches_band in score_bands:
         for item in recommendations:
-            if matches_band(int(item.get("score", 0))) and add(item):
+            key = (str(item.get("title", "")), str(item.get("url", "")))
+            if key in selected_keys:
+                continue
+            if matches_band(int(item.get("score", 0))):
+                diverse.append(item)
+                selected_keys.add(key)
                 break
 
-    for item in recommendations:
-        add(item)
+    if not diverse:
+        return selected
 
-    return selected
+    return [*selected[: limit - len(diverse)], *diverse]
 
 
 def extract_skills(text: str) -> list[str]:
@@ -213,20 +257,32 @@ def extract_skills(text: str) -> list[str]:
     return found
 
 
+def extract_role_terms(text: str) -> list[str]:
+    normalized = normalize_for_match(text[:1200])
+    roles: list[str] = []
+    for role, aliases in ROLE_ALIASES.items():
+        if any(contains_phrase(normalized, alias) for alias in aliases):
+            roles.append(role)
+    return roles
+
+
 def extract_jobs(page_text: str, source_url: str = "") -> list[JobPosting]:
     text, links = extract_readable_text_and_links(page_text)
     linked_jobs = jobs_from_links(links, source_url)
     block_jobs = jobs_from_text_blocks(text, source_url, links)
 
     jobs: list[JobPosting] = []
-    seen: set[str] = set()
-    for job in [*block_jobs, *linked_jobs]:
+    seen: dict[str, int] = {}
+    for job in [*linked_jobs, *block_jobs]:
         key = normalize_for_match(f"{job.title} {job.url}")
         if key in seen:
+            existing_index = seen[key]
+            if len(job.description) > len(jobs[existing_index].description):
+                jobs[existing_index] = job
             continue
-        seen.add(key)
+        seen[key] = len(jobs)
         jobs.append(job)
-    return jobs[:40]
+    return jobs
 
 
 def extract_readable_text_and_links(page_text: str) -> tuple[str, list[tuple[str, str]]]:
@@ -283,6 +339,7 @@ def score_job(
     job: JobPosting,
     resume_skills: list[str],
     *,
+    resume_roles: list[str] | None = None,
     target_skills: list[str] | None = None,
     target_terms: set[str] | None = None,
 ) -> dict[str, Any]:
@@ -297,14 +354,18 @@ def score_job(
         target_skills=target_skills or [],
         target_terms=target_terms or set(),
     )
+    role_matches, role_adjustment = calculate_role_alignment(job, resume_roles or [])
 
     if not job_set:
         overlap_score = 20 if any(token in normalize_for_match(job.description) for token in resume_set) else 8
     else:
         overlap_score = round(100 * len(resume_set.intersection(job_set)) / max(len(job_set), 1))
 
+    if role_matches:
+        overlap_score = max(overlap_score, 60)
+
     seniority_penalty = seniority_mismatch_penalty(job.description, resume_skills)
-    score = max(0, min(100, overlap_score - seniority_penalty + intent_bonus))
+    score = max(0, min(100, overlap_score - seniority_penalty + intent_bonus + role_adjustment))
 
     return {
         "title": job.title,
@@ -314,6 +375,7 @@ def score_job(
         "missing_skills": missing[:6],
         "job_skills": job_skills,
         "intent_matches": intent_matches,
+        "role_matches": role_matches,
         "why": build_reason(score, matched, missing),
         "recommendation": build_action_recommendation(
             score=score,
@@ -362,8 +424,42 @@ def calculate_intent_boost(
     return matches[:8], bonus
 
 
+def calculate_role_alignment(job: JobPosting, resume_roles: list[str]) -> tuple[list[str], int]:
+    if not resume_roles:
+        return [], 0
+
+    title = normalize_for_match(job.title)
+    description = normalize_for_match(job.description)
+    matches: list[str] = []
+    best_bonus = 0
+
+    for role in resume_roles:
+        aliases = ROLE_ALIASES.get(role, (role.lower(),))
+        title_hits = [alias for alias in aliases if contains_phrase(title, alias)]
+        description_hits = [
+            alias
+            for alias in aliases
+            if alias not in title_hits and contains_phrase(description, alias)
+        ]
+        if title_hits:
+            matches.append(role)
+            best_bonus = max(best_bonus, 32 if "technical program manager" in title_hits else 24)
+        elif description_hits:
+            matches.append(role)
+            best_bonus = max(best_bonus, 10)
+
+    if matches:
+        return matches[:3], best_bonus
+
+    if any(hint in title for hint in ROLE_MISMATCH_TITLE_HINTS):
+        return [], -24
+    return [], -12
+
+
 def build_reason(score: int, matched: list[str], missing: list[str]) -> str:
     if score >= 75:
+        if not matched:
+            return "Strong fit: the role title aligns closely with your resume headline."
         return f"Strong fit: your profile directly matches {', '.join(matched[:4])}."
     if score >= 45:
         return f"Possible fit: clear overlap in {', '.join(matched[:3])}, with a few gaps."
@@ -525,6 +621,13 @@ def is_probable_job_title(text: str) -> bool:
 
 def clean_title(text: str) -> str:
     text = normalize_space(re.sub(r"Apply\s+Now|View\s+Job|Learn\s+More", "", text, flags=re.I))
+    text = re.sub(r"\s+\bApply\b$", "", text, flags=re.I)
+    text = re.sub(
+        r"\s+(Remote-Friendly|San Francisco|New York City|Seattle|London|Ontario|Boston|Washington, DC)\b.*$",
+        "",
+        text,
+        flags=re.I,
+    )
     text = re.sub(r"^[^\w+]+|[^\w)]+$", "", text)
     return text[:95].strip()
 

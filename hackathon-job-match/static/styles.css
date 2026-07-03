@@ -621,6 +621,49 @@ label {
   gap: 14px;
 }
 
+.results-pager {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  margin: 18px 0 6px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.results-pager button {
+  min-height: 36px;
+  padding: 0 15px;
+  border: 1px solid #cbd5df;
+  border-radius: 999px;
+  color: #344250;
+  background: #ffffff;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.results-pager button:hover:not(:disabled) {
+  color: #185f5a;
+  border-color: rgba(47, 156, 149, 0.45);
+  background: #e7f5f2;
+}
+
+.results-pager button:disabled {
+  cursor: not-allowed;
+  opacity: 0.46;
+}
+
+.results-pager span {
+  min-width: 220px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+  text-align: center;
+}
+
 .empty-board {
   display: grid;
   min-height: 460px;

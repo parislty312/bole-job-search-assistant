@@ -2,7 +2,7 @@ import unittest
 import zlib
 from urllib.parse import urlparse
 
-from matcher import analyze_fit, extract_jobs, extract_skills
+from matcher import analyze_fit, extract_jobs, extract_role_terms, extract_skills
 from app import (
     build_multipart_form,
     build_user_intent,
@@ -78,7 +78,7 @@ class MatcherTests(unittest.TestCase):
             AI Engineer {index}
             Build Python SQL LLM systems for cloud analytics and agent workflows.
             """
-            for index in range(14)
+            for index in range(28)
         )
         jobs = f"""
         {perfect_jobs}
@@ -90,9 +90,64 @@ class MatcherTests(unittest.TestCase):
         result = analyze_fit("Python SQL LLM Cloud Analytics", jobs)
         titles = [item["title"] for item in result["recommendations"]]
 
-        self.assertLessEqual(len(result["recommendations"]), 12)
+        self.assertLessEqual(len(result["recommendations"]), 60)
         self.assertIn("Product Designer", titles)
         self.assertTrue(any(item["score"] < 50 for item in result["recommendations"]))
+
+    def test_recommendations_can_show_more_than_twelve_roles(self):
+        jobs = "\n\n".join(
+            f"""
+            Technical Program Manager, Platform {index}
+            Drive cross-functional platform execution, launch planning, and stakeholder alignment.
+            """
+            for index in range(36)
+        )
+
+        result = analyze_fit("Senior Technical Program Manager with platform launch experience", jobs)
+
+        self.assertGreater(len(result["recommendations"]), 24)
+        self.assertLessEqual(len(result["recommendations"]), 60)
+
+    def test_role_alignment_prioritizes_tpm_titles(self):
+        result = analyze_fit(
+            "Senior Technical Program Manager with Python, cloud, API, and security programs",
+            """
+            Product Engineer
+            Build product experiences with API platforms.
+
+            Applied AI Security Architect
+            Design security architecture for AI systems.
+
+            Technical Program Manager, API Platform
+            Drive API platform execution, cross-functional planning, and launch readiness.
+            """,
+        )
+
+        self.assertEqual(result["recommendations"][0]["title"], "Technical Program Manager, API Platform")
+        self.assertIn("Technical Program Manager", result["recommendations"][0]["role_matches"])
+        self.assertGreaterEqual(result["recommendations"][0]["score"], 90)
+
+    def test_extract_jobs_keeps_late_linked_tpm_roles(self):
+        links = "\n".join(
+            f'<a href="/jobs/{index}">Software Engineer {index} San Francisco, CA Apply</a>'
+            for index in range(260)
+        )
+        html = f"""
+        <html><body>
+          {links}
+          <a href="/jobs/tpm">Technical Program Manager, API Platform San Francisco, CA Apply</a>
+        </body></html>
+        """
+
+        jobs = extract_jobs(html, "https://example.com/careers")
+
+        self.assertTrue(any(job.title == "Technical Program Manager, API Platform" for job in jobs))
+
+    def test_extract_role_terms_detects_resume_headline(self):
+        self.assertIn(
+            "Technical Program Manager",
+            extract_role_terms("Senior Technical Program Manager specializing in AI launches."),
+        )
 
     def test_analyze_fit_keeps_source_url_for_open_fallback(self):
         result = analyze_fit(
