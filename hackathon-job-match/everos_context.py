@@ -100,6 +100,7 @@ def remember_analysis_result(
     warnings: list[str],
     user_intent: str,
     career_url: str = "",
+    memory_updates: dict[str, Any] | None = None,
 ) -> MemoryWrite:
     """Write the completed job-search analysis back to EverOS."""
 
@@ -126,6 +127,7 @@ def remember_analysis_result(
         warnings=warnings,
         user_intent=user_intent,
         career_url=career_url,
+        memory_updates=memory_updates or {},
     )
     session_id = f"bole-analysis-{int(time.time())}"
 
@@ -263,8 +265,10 @@ def build_analysis_memory(
     warnings: list[str],
     user_intent: str,
     career_url: str = "",
+    memory_updates: dict[str, Any] | None = None,
 ) -> str:
     profile = resume_profile or {}
+    curated = sanitize_memory_updates(memory_updates or {})
     compact_jobs = []
     for job in top_jobs[:5]:
         compact_jobs.append(
@@ -291,11 +295,28 @@ def build_analysis_memory(
         },
         "top_jobs": compact_jobs,
         "warnings": warnings[:8],
+        "durable_preferences": curated["stable_preferences"],
+        "recurring_gaps": curated["recurring_gaps"],
     }
     return (
         "Bole completed a job-search analysis. Store this as long-term user "
         f"preference and job-search history:\n{memory_payload}"
     )
+
+
+def sanitize_memory_updates(memory_updates: dict[str, Any]) -> dict[str, list[str]]:
+    """Only persist concise, durable preference signals curated by the coordinator."""
+
+    def clean(key: str) -> list[str]:
+        value = memory_updates.get(key, [])
+        if not isinstance(value, list):
+            return []
+        return [" ".join(str(item).split())[:280] for item in value if str(item).strip()][:6]
+
+    return {
+        "stable_preferences": clean("stable_preferences"),
+        "recurring_gaps": clean("recurring_gaps"),
+    }
 
 
 def build_feedback_memory(*, feedback: str, job: dict[str, Any]) -> str:
@@ -304,6 +325,7 @@ def build_feedback_memory(*, feedback: str, job: dict[str, Any]) -> str:
         "feedback": feedback,
         "feedback_label": feedback_label(feedback),
         "job": {
+            "job_id": job.get("job_id", ""),
             "title": job.get("title", ""),
             "url": job.get("url", ""),
             "score": job.get("llm_score") or job.get("score", 0),

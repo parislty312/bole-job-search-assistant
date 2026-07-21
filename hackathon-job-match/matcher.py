@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import html
+import hashlib
 import re
 from dataclasses import dataclass
 from html.parser import HTMLParser
@@ -368,6 +369,7 @@ def score_job(
     score = max(0, min(100, overlap_score - seniority_penalty + intent_bonus + role_adjustment))
 
     return {
+        "job_id": build_job_id(job),
         "title": job.title,
         "url": job.url,
         "score": score,
@@ -385,6 +387,19 @@ def score_job(
         ),
         "evidence": evidence_snippets(job.description, matched or job_skills),
     }
+
+
+def build_job_id(job: JobPosting) -> str:
+    """Create a stable identifier so agents never join duplicate titles by name."""
+
+    identity = "|".join(
+        (
+            normalize_for_match(job.url),
+            normalize_for_match(job.title),
+            normalize_for_match(job.description)[:240],
+        )
+    )
+    return f"job_{hashlib.sha256(identity.encode('utf-8')).hexdigest()[:16]}"
 
 
 def extract_intent_terms(text: str) -> set[str]:

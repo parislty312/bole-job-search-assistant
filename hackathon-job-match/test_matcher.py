@@ -1,6 +1,7 @@
 import unittest
 import zlib
 from urllib.parse import urlparse
+from unittest.mock import patch
 
 from matcher import analyze_fit, extract_jobs, extract_role_terms, extract_skills
 from app import (
@@ -13,12 +14,101 @@ from app import (
     is_eightfold_career_page,
     normalize_user_id,
 )
-from everos_context import build_analysis_memory, build_feedback_memory, build_memory_query
-from llm_analyzer import build_prompt, extract_output_text, normalize_llm_result
+from everos_context import build_analysis_memory, build_feedback_memory, build_memory_query, sanitize_memory_updates
+from llm_analyzer import (
+    apply_multi_agent_result,
+    build_prompt,
+    extract_output_text,
+    normalize_llm_result,
+    run_multi_agent_analysis,
+)
 from pdf_text import extract_pdf_text, normalize_pdf_text
 
 
 class MatcherTests(unittest.TestCase):
+    def test_memory_curator_only_keeps_structured_preference_lists(self):
+        curated = sanitize_memory_updates(
+            {
+                "stable_preferences": ["Prefer TPM roles", "  Remote-friendly roles  "],
+                "recurring_gaps": "this should not be stored",
+            }
+        )
+
+        self.assertEqual(curated["stable_preferences"], ["Prefer TPM roles", "Remote-friendly roles"])
+        self.assertEqual(curated["recurring_gaps"], [])
+
+    def test_duplicate_titles_receive_distinct_stable_job_ids(self):
+        result = analyze_fit(
+            "Python SQL cloud",
+            """
+            Data Engineer
+            Build Python SQL data pipelines for the platform team.
+
+            Data Engineer
+            Build cloud data services for the security team.
+            """,
+        )
+
+        job_ids = [job["job_id"] for job in result["recommendations"]]
+        self.assertEqual(len(job_ids), len(set(job_ids)))
+
+    def test_multi_agent_orchestrator_batches_jobs_and_merges_by_job_id(self):
+        recommendations = [
+            {
+                "job_id": f"job_{index}",
+                "title": f"Technical Program Manager {index}",
+                "score": 70,
+                "matched_skills": ["Leadership"],
+                "missing_skills": ["Cloud"],
+                "evidence": ["Lead cross-functional delivery."],
+            }
+            for index in range(16)
+        ]
+        calls = []
+
+        def fake_run_agent(name, request, *_args):
+            calls.append(name)
+            if name == "resume_profile":
+                return {"headline": "TPM", "core_strengths": ["Leadership"], "evidence": ["Led launches"]}
+            if name.startswith("jd_intelligence"):
+                return {"jobs": [{"job_id": job["job_id"]} for job in request["jobs"]]}
+            if name == "fit_auditor":
+                return {"job_reviews": [{"job_id": "job_1", "adjusted_score": 84, "confidence": "high", "fit_reason": "Role aligned", "verified_evidence": ["Led launches"]}]}
+            if name == "career_coach":
+                return {"job_guidance": [{"job_id": "job_1", "resume_update": "Lead with launch outcomes", "improvement_plan": ["Add metrics"], "interview_pitch": "I ship programs."}]}
+            return {"summary": "Career team completed review.", "candidate_profile": {"headline": "TPM"}, "job_updates": [{"job_id": "job_1", "final_score": 90, "confidence": "high", "fit_reason": "Verified TPM fit", "verified_evidence": ["Led launches"], "concerns": [], "resume_update": "Lead with launch outcomes", "improvement_plan": ["Add metrics"], "interview_pitch": "I ship programs."}], "memory_updates": {"stable_preferences": ["TPM roles"], "recurring_gaps": []}}
+
+        with patch.dict("os.environ", {"OPENAI_API_KEY": "test"}, clear=False), patch("llm_analyzer.run_agent", side_effect=fake_run_agent):
+            reviewed = run_multi_agent_analysis("Senior TPM", recommendations)
+
+        self.assertIn("resume_profile", calls)
+        self.assertEqual(len([call for call in calls if call.startswith("jd_intelligence_")]), 2)
+        self.assertEqual(reviewed["review_status"], "completed")
+        payload = {"recommendations": recommendations[:]}
+        apply_multi_agent_result(payload, reviewed)
+        self.assertEqual(payload["recommendations"][0]["job_id"], "job_1")
+        self.assertEqual(payload["recommendations"][0]["confidence"], "high")
+
+    def test_partial_multi_agent_failure_keeps_baseline_recommendations(self):
+        recommendations = [{"job_id": "job_a", "title": "Data Engineer", "score": 71, "matched_skills": ["Python"], "missing_skills": [], "evidence": []}]
+
+        def fake_run_agent(name, _request, *_args):
+            if name == "resume_profile":
+                return {"headline": "Data candidate"}
+            if name == "career_coach":
+                raise RuntimeError("coach timeout")
+            if name == "bole_coordinator":
+                raise RuntimeError("coordinator timeout")
+            return {"jobs": []} if name.startswith("jd_intelligence") else {"job_reviews": []}
+
+        with patch.dict("os.environ", {"OPENAI_API_KEY": "test"}, clear=False), patch("llm_analyzer.run_agent", side_effect=fake_run_agent):
+            reviewed = run_multi_agent_analysis("Python", recommendations)
+
+        self.assertEqual(reviewed["review_status"], "partial")
+        payload = {"recommendations": recommendations[:]}
+        apply_multi_agent_result(payload, reviewed)
+        self.assertEqual(payload["recommendations"][0]["score"], 71)
+        self.assertEqual(payload["recommendations"][0]["confidence"], "medium")
     def test_extract_skills_maps_aliases(self):
         skills = extract_skills("Built RAG agents with Python, PyTorch, SQL, and AWS.")
 

@@ -30,6 +30,10 @@ const profileHeadline = document.querySelector("#profileHeadline");
 const profileStrengths = document.querySelector("#profileStrengths");
 const profileDomains = document.querySelector("#profileDomains");
 const profileStrategy = document.querySelector("#profileStrategy");
+const agentReviewPanel = document.querySelector("#agentReviewPanel");
+const agentReviewBadge = document.querySelector("#agentReviewBadge");
+const agentReviewSummary = document.querySelector("#agentReviewSummary");
+const agentReviewInsights = document.querySelector("#agentReviewInsights");
 const skillCount = document.querySelector("#skillCount");
 const jobCount = document.querySelector("#jobCount");
 const jobTemplate = document.querySelector("#jobTemplate");
@@ -406,6 +410,7 @@ function render(payload) {
   renderSkills(payload.resume_skills || []);
   renderMemory(payload.memory);
   renderProfile(payload.candidate_profile);
+  renderAgentReview(payload.agent_analysis, payload.agent_insights);
   showWarnings(payload.warnings || []);
   renderCurrentResultsPage();
 }
@@ -446,6 +451,7 @@ function renderCurrentResultsPage() {
     card.querySelector(".score-ring").style.setProperty("--score-color", scoreColor(displayScore));
     card.querySelector(".score-label").textContent = scoreLabel(displayScore);
     renderMatchBadges(card, job, displayScore);
+    renderConfidence(card, job.confidence);
     card.querySelector(".job-title").textContent = job.title;
     card.querySelector(".why").textContent = job.why;
     card.querySelector(".intent-reason").textContent = job.intent_matches?.length
@@ -475,6 +481,7 @@ function renderCurrentResultsPage() {
     evidence.innerHTML = (job.evidence || [])
       .map((item) => `<p>${escapeHtml(item)}</p>`)
       .join("");
+    renderJobReviewDetails(card, job);
 
     card.querySelectorAll("[data-feedback]").forEach((button) => {
       button.addEventListener("click", () => submitJobFeedback(button, card.__job));
@@ -536,6 +543,31 @@ function renderMatchBadges(card, job, score) {
   } else {
     roleBadge.hidden = true;
   }
+}
+
+function renderConfidence(card, confidence) {
+  const badge = card.querySelector(".confidence-badge");
+  if (!confidence) {
+    badge.hidden = true;
+    return;
+  }
+  badge.hidden = false;
+  badge.textContent = `${confidence[0].toUpperCase()}${confidence.slice(1)} confidence`;
+  badge.dataset.tone = confidence;
+}
+
+function renderJobReviewDetails(card, job) {
+  const details = card.querySelector(".job-review-details");
+  const copy = card.querySelector(".review-detail-copy");
+  const parts = [];
+  if (job.llm_reason) parts.push(job.llm_reason);
+  if (job.risk_flags?.length) parts.push(`Things to review: ${job.risk_flags.join(", ")}.`);
+  if (!parts.length) {
+    details.hidden = true;
+    return;
+  }
+  details.hidden = false;
+  copy.textContent = parts.join(" ");
 }
 
 function renderDistance(card, job, score) {
@@ -664,6 +696,41 @@ function renderProfile(profile) {
     : "";
   renderChips(profileStrengths, profile.core_strengths || [], "No strengths returned");
   renderChips(profileDomains, profile.domains || [], "No domains returned");
+}
+
+function renderAgentReview(analysis, insights) {
+  if (!analysis) {
+    agentReviewPanel.hidden = true;
+    return;
+  }
+  agentReviewPanel.hidden = false;
+  const status = analysis.status || "partial";
+  agentReviewBadge.textContent = reviewLabel(status);
+  agentReviewBadge.dataset.status = status;
+  agentReviewSummary.textContent = analysis.summary || "Bole kept the deterministic match as the baseline for this review.";
+  agentReviewInsights.innerHTML = "";
+
+  const rows = [];
+  const completed = insights?.completed_agents || [];
+  if (completed.length) rows.push(`Reviewed by: ${completed.join(", ")}.`);
+  if (insights?.jobs_reviewed) rows.push(`${insights.jobs_reviewed} jobs received JD intelligence review.`);
+  if (insights?.resume_evidence?.length) rows.push(`Resume evidence considered: ${insights.resume_evidence.join(" · ")}.`);
+  const unavailable = Object.entries(analysis.agents || {})
+    .filter(([, value]) => value.status !== "completed")
+    .map(([name]) => name.replaceAll("_", " "));
+  if (unavailable.length) rows.push(`Unavailable specialists: ${unavailable.join(", ")}. Baseline matching remained active.`);
+  rows.forEach((row) => {
+    const paragraph = document.createElement("p");
+    paragraph.textContent = row;
+    agentReviewInsights.appendChild(paragraph);
+  });
+}
+
+function reviewLabel(status) {
+  if (status === "completed") return "Reviewed";
+  if (status === "partial") return "Partially reviewed";
+  if (status === "not_configured") return "Baseline matching";
+  return "AI review unavailable";
 }
 
 function renderSkills(skills) {

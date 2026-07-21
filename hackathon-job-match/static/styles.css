@@ -959,6 +959,90 @@ label {
   font-style: italic;
 }
 
+.agent-review-panel {
+  margin: 18px 0;
+  padding: 18px;
+  border: 1px solid rgba(66, 103, 178, 0.24);
+  border-radius: 20px;
+  background: linear-gradient(135deg, #f6f8ff, #fbfcff);
+}
+
+.agent-review-panel h3 {
+  margin: 2px 0 0;
+  color: var(--ink);
+}
+
+.agent-review-panel > p {
+  margin: 12px 0 0;
+  color: #344250;
+  font-weight: 650;
+  line-height: 1.45;
+}
+
+.agent-review-badge,
+.confidence-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 0 10px;
+  border: 1px solid #cbd8e5;
+  border-radius: 999px;
+  color: #344250;
+  background: #fff;
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.agent-review-badge[data-status="completed"],
+.confidence-badge[data-tone="high"] {
+  color: #185f5a;
+  border-color: rgba(47, 156, 149, 0.38);
+  background: #e7f5f2;
+}
+
+.agent-review-badge[data-status="partial"],
+.confidence-badge[data-tone="medium"] {
+  color: #7c5520;
+  border-color: rgba(197, 144, 47, 0.34);
+  background: #fff4d8;
+}
+
+.agent-review-badge[data-status="unavailable"],
+.confidence-badge[data-tone="low"] {
+  color: #7f3448;
+  border-color: rgba(217, 111, 108, 0.32);
+  background: #fff0f3;
+}
+
+.agent-review-panel details,
+.job-review-details {
+  margin-top: 14px;
+  border-top: 1px solid rgba(66, 103, 178, 0.16);
+  padding-top: 12px;
+}
+
+.agent-review-panel summary,
+.job-review-details summary {
+  color: #243b53;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.agent-review-insights,
+.review-detail-copy {
+  margin-top: 10px;
+  color: #4d5c69;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.agent-review-insights p,
+.review-detail-copy {
+  margin: 6px 0;
+}
+
 .feedback-row {
   display: flex;
   flex-wrap: wrap;

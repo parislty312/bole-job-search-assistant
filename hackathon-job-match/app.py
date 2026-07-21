@@ -19,7 +19,12 @@ from everos_context import (
     remember_job_feedback,
     retrieve_user_preferences,
 )
-from llm_analyzer import LLMUnavailable, analyze_with_llm, llm_is_configured
+from llm_analyzer import (
+    LLMUnavailable,
+    apply_multi_agent_result,
+    llm_is_configured,
+    run_multi_agent_analysis,
+)
 from matcher import analyze_fit
 from pdf_text import extract_pdf_text
 
@@ -76,6 +81,8 @@ class BoleHandler(BaseHTTPRequestHandler):
             career_url = str(payload.get("career_url", "")).strip()
             target_intent = str(payload.get("target_intent", "")).strip()
             jobs_text = str(payload.get("jobs_text", "")).strip()
+            # The UI control is retained for compatibility, but configured AI review now
+            # runs automatically as a coordinated career team.
             use_llm = bool(payload.get("use_llm", False))
 
             if not user_id:
@@ -125,17 +132,28 @@ class BoleHandler(BaseHTTPRequestHandler):
                 result["warnings"].append(fetch_error)
             result["llm_enabled"] = llm_is_configured()
 
-            if use_llm:
+            result["review_status"] = "not_configured"
+            if llm_is_configured():
                 try:
-                    llm_result = analyze_with_llm(
+                    agent_result = run_multi_agent_analysis(
                         resume_text,
                         result["recommendations"],
                         memory_context=memory_lookup.text,
                         target_intent=target_intent,
                     )
-                    apply_llm_result(result, llm_result)
+                    apply_multi_agent_result(result, agent_result)
                 except LLMUnavailable as exc:
+                    result["review_status"] = "unavailable"
+                    result["agent_analysis"] = {
+                        "status": "unavailable",
+                        "summary": "AI career-team review was unavailable; Bole kept the baseline matching results.",
+                        "agents": {},
+                    }
                     result["warnings"].append(str(exc))
+            elif use_llm:
+                result["warnings"].append(
+                    "AI career-team review is unavailable because OPENAI_API_KEY is not configured."
+                )
 
             memory_write = remember_analysis_result(
                 user_id,
@@ -149,6 +167,7 @@ class BoleHandler(BaseHTTPRequestHandler):
                     resume_text=resume_text,
                 ),
                 career_url=career_url,
+                memory_updates=result.get("memory_updates", {}),
             )
             result["memory"]["write"] = {
                 "enabled": memory_write.enabled,

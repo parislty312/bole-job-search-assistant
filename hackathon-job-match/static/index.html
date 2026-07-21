@@ -151,6 +151,21 @@
           <p id="profileStrategy"></p>
         </section>
 
+        <section id="agentReviewPanel" class="agent-review-panel" hidden>
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Career-team review</p>
+              <h3>Bole's career team reviewed this</h3>
+            </div>
+            <span id="agentReviewBadge" class="agent-review-badge"></span>
+          </div>
+          <p id="agentReviewSummary"></p>
+          <details id="agentReviewDetails">
+            <summary>How Bole reached these recommendations</summary>
+            <div id="agentReviewInsights" class="agent-review-insights"></div>
+          </details>
+        </section>
+
         <section id="warnings" class="warnings" hidden></section>
 
         <section id="results" class="results">
@@ -189,6 +204,7 @@
             <div class="job-meta-row">
               <span class="match-badge"></span>
               <span class="role-badge"></span>
+              <span class="confidence-badge"></span>
             </div>
             <p class="why"></p>
             <p class="intent-reason"></p>
@@ -239,6 +255,10 @@
             <ul></ul>
           </div>
           <div class="evidence"></div>
+          <details class="job-review-details" hidden>
+            <summary>How Bole reviewed this role</summary>
+            <p class="review-detail-copy"></p>
+          </details>
         </div>
       </article>
     </template>
