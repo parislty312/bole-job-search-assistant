@@ -4,6 +4,7 @@ import json
 import mimetypes
 import os
 import re
+import threading
 import uuid
 from base64 import b64decode
 from html import escape
@@ -26,6 +27,7 @@ from llm_analyzer import (
     run_multi_agent_analysis,
 )
 from matcher import analyze_fit
+from mock_interview import evaluate_mock_answer, start_mock_interview
 from pdf_text import extract_pdf_text
 
 
@@ -36,6 +38,9 @@ PORT = 5050
 OPENAI_AUDIO_TRANSCRIPTIONS_URL = "https://api.openai.com/v1/audio/transcriptions"
 DEFAULT_TRANSCRIPTION_MODEL = "whisper-1"
 EIGHTFOLD_FETCH_LIMIT = 40
+MAX_INTERVIEW_QUESTIONS = 5
+INTERVIEW_SESSIONS: dict[str, dict[str, Any]] = {}
+INTERVIEW_SESSIONS_LOCK = threading.Lock()
 
 
 class BoleHandler(BaseHTTPRequestHandler):
@@ -68,6 +73,14 @@ class BoleHandler(BaseHTTPRequestHandler):
 
         if self.path == "/api/transcribe-voice":
             self._handle_transcribe_voice()
+            return
+
+        if self.path == "/api/mock-interview/start":
+            self._handle_mock_interview_start()
+            return
+
+        if self.path == "/api/mock-interview/answer":
+            self._handle_mock_interview_answer()
             return
 
         if self.path != "/api/analyze":
@@ -281,6 +294,98 @@ class BoleHandler(BaseHTTPRequestHandler):
             self._send_json({"error": "Invalid JSON body."}, status=400)
         except Exception as exc:  # pragma: no cover - keeps hackathon server resilient.
             self._send_json({"error": f"Voice transcription failed: {exc}"}, status=500)
+
+    def _handle_mock_interview_start(self) -> None:
+        try:
+            payload = self._read_json()
+            user_id = normalize_user_id(str(payload.get("user_id", "")))
+            resume_text = str(payload.get("resume_text", "")).strip()
+            target_intent = str(payload.get("target_intent", "")).strip()
+            job = payload.get("job", {})
+            if not user_id:
+                self._send_json({"error": "Please sign in before starting an interview."}, status=400)
+                return
+            if not resume_text:
+                self._send_json({"error": "Resume text is required for interview practice."}, status=400)
+                return
+            if not isinstance(job, dict) or not str(job.get("title", "")).strip():
+                self._send_json({"error": "Choose a recommended job before practicing."}, status=400)
+                return
+
+            interview = start_mock_interview(
+                resume_text=resume_text,
+                job=job,
+                target_intent=target_intent,
+            )
+            if not interview["question"]["text"]:
+                self._send_json({"error": "Bole could not create an interview question. Try again."}, status=502)
+                return
+            session_id = uuid.uuid4().hex
+            with INTERVIEW_SESSIONS_LOCK:
+                INTERVIEW_SESSIONS[session_id] = {
+                    "user_id": user_id,
+                    "resume_text": resume_text,
+                    "job": job,
+                    "history": [],
+                    "question": interview["question"],
+                    "question_count": 1,
+                }
+            self._send_json({"session_id": session_id, **interview, "complete": False})
+        except LLMUnavailable as exc:
+            self._send_json({"error": str(exc)}, status=503)
+        except json.JSONDecodeError:
+            self._send_json({"error": "Invalid JSON body."}, status=400)
+        except Exception as exc:  # pragma: no cover - keeps the app resilient.
+            self._send_json({"error": f"Mock interview failed: {exc}"}, status=500)
+
+    def _handle_mock_interview_answer(self) -> None:
+        try:
+            payload = self._read_json()
+            user_id = normalize_user_id(str(payload.get("user_id", "")))
+            session_id = str(payload.get("session_id", "")).strip()
+            answer = str(payload.get("answer", "")).strip()
+            if not user_id or not session_id:
+                self._send_json({"error": "Your interview session is missing. Start again."}, status=400)
+                return
+            if not answer:
+                self._send_json({"error": "Write an answer before requesting feedback."}, status=400)
+                return
+            if len(answer) > 8_000:
+                self._send_json({"error": "Keep each interview answer under 8,000 characters."}, status=400)
+                return
+            with INTERVIEW_SESSIONS_LOCK:
+                session = INTERVIEW_SESSIONS.get(session_id)
+            if not session or session["user_id"] != user_id:
+                self._send_json({"error": "This interview session has expired. Start a new one."}, status=404)
+                return
+
+            history = [*session["history"], {"question": session["question"]["text"], "answer": answer}]
+            review = evaluate_mock_answer(
+                resume_text=session["resume_text"],
+                job=session["job"],
+                history=history,
+                answer=answer,
+            )
+            complete = session["question_count"] >= MAX_INTERVIEW_QUESTIONS or not review["question"]["text"]
+            with INTERVIEW_SESSIONS_LOCK:
+                session["history"] = history
+                session["question"] = review["question"]
+                session["question_count"] += 1
+            self._send_json({
+                "feedback": review["feedback"],
+                "score": review["score"],
+                "strengths": review["strengths"],
+                "improvements": review["improvements"],
+                "next_question": review["question"],
+                "question_count": min(session["question_count"], MAX_INTERVIEW_QUESTIONS),
+                "complete": complete,
+            })
+        except LLMUnavailable as exc:
+            self._send_json({"error": str(exc)}, status=503)
+        except json.JSONDecodeError:
+            self._send_json({"error": "Invalid JSON body."}, status=400)
+        except Exception as exc:  # pragma: no cover - keeps the app resilient.
+            self._send_json({"error": f"Interview feedback failed: {exc}"}, status=500)
 
     def log_message(self, format: str, *args: Any) -> None:
         print(f"{self.address_string()} - {format % args}")

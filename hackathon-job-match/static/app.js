@@ -41,6 +41,20 @@ const resultsPager = document.querySelector("#resultsPager");
 const prevPageButton = document.querySelector("#prevPageButton");
 const nextPageButton = document.querySelector("#nextPageButton");
 const pageStatus = document.querySelector("#pageStatus");
+const mockInterviewDialog = document.querySelector("#mockInterviewDialog");
+const closeInterviewButton = document.querySelector("#closeInterviewButton");
+const interviewRole = document.querySelector("#interviewRole");
+const interviewIntro = document.querySelector("#interviewIntro");
+const interviewFocus = document.querySelector("#interviewFocus");
+const interviewCategory = document.querySelector("#interviewCategory");
+const interviewQuestion = document.querySelector("#interviewQuestion");
+const interviewAnswer = document.querySelector("#interviewAnswer");
+const submitInterviewAnswer = document.querySelector("#submitInterviewAnswer");
+const interviewFeedback = document.querySelector("#interviewFeedback");
+const interviewScore = document.querySelector("#interviewScore");
+const interviewFeedbackCopy = document.querySelector("#interviewFeedbackCopy");
+const interviewStrengths = document.querySelector("#interviewStrengths");
+const interviewImprovements = document.querySelector("#interviewImprovements");
 const RESULTS_PER_PAGE = 6;
 const MAX_RESULT_PAGES = 10;
 let activeUser = loadUser();
@@ -51,6 +65,7 @@ let isListening = false;
 let mediaRecorder = null;
 let audioChunks = [];
 let voiceMode = "unsupported";
+let activeInterviewSession = null;
 
 renderAuthState();
 setupVoiceInput();
@@ -68,6 +83,12 @@ nextPageButton?.addEventListener("click", () => {
   currentResultsPage += 1;
   renderCurrentResultsPage();
 });
+
+closeInterviewButton?.addEventListener("click", closeMockInterview);
+mockInterviewDialog?.addEventListener("close", () => {
+  activeInterviewSession = null;
+});
+submitInterviewAnswer?.addEventListener("click", submitInterviewResponse);
 
 loginForm.addEventListener("submit", (event) => {
   event.preventDefault();
@@ -486,6 +507,7 @@ function renderCurrentResultsPage() {
     card.querySelectorAll("[data-feedback]").forEach((button) => {
       button.addEventListener("click", () => submitJobFeedback(button, card.__job));
     });
+    card.querySelector(".interview-button").addEventListener("click", () => openMockInterview(card.__job));
 
     results.appendChild(card);
   });
@@ -652,6 +674,105 @@ async function submitJobFeedback(button, job) {
     button.disabled = false;
     button.textContent = previousText;
   }
+}
+
+async function openMockInterview(job) {
+  if (!mockInterviewDialog) return;
+  activeInterviewSession = null;
+  interviewRole.textContent = `Practicing for: ${job.title}`;
+  interviewIntro.textContent = "Bole is preparing your first role-specific question…";
+  interviewQuestion.textContent = "";
+  interviewCategory.textContent = "Preparing";
+  interviewAnswer.value = "";
+  interviewFeedback.hidden = true;
+  renderChips(interviewFocus, [], "Preparing interview focus");
+  mockInterviewDialog.showModal();
+
+  try {
+    const response = await fetch("/api/mock-interview/start", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        user_id: activeUser?.id || "",
+        resume_text: resumeText.value,
+        target_intent: targetIntent.value,
+        job,
+      }),
+    });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.error || "Could not start a mock interview.");
+    activeInterviewSession = { id: payload.session_id, job };
+    interviewIntro.textContent = payload.intro || "Answer as if you were speaking with the hiring team.";
+    renderChips(interviewFocus, payload.focus_areas || [], "Role-specific practice");
+    renderInterviewQuestion(payload.question);
+  } catch (error) {
+    interviewIntro.textContent = error.message;
+    interviewCategory.textContent = "Unavailable";
+    interviewQuestion.textContent = "Configure the server-side OpenAI key, then try again.";
+  }
+}
+
+async function submitInterviewResponse() {
+  const answer = interviewAnswer.value.trim();
+  if (!activeInterviewSession || !answer) {
+    if (!answer) interviewAnswer.focus();
+    return;
+  }
+  setInterviewLoading(true);
+  try {
+    const response = await fetch("/api/mock-interview/answer", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        user_id: activeUser?.id || "",
+        session_id: activeInterviewSession.id,
+        answer,
+      }),
+    });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.error || "Could not review this answer.");
+    renderInterviewFeedback(payload);
+    interviewAnswer.value = "";
+    if (payload.complete) {
+      activeInterviewSession = null;
+      submitInterviewAnswer.disabled = true;
+      submitInterviewAnswer.querySelector("span").textContent = "Practice complete";
+      interviewIntro.textContent = "You completed this short practice round. Review the feedback and try another role when ready.";
+    } else {
+      renderInterviewQuestion(payload.next_question);
+      interviewIntro.textContent = `Question ${payload.question_count || 2} of 5. Use the feedback to strengthen your next answer.`;
+    }
+  } catch (error) {
+    interviewIntro.textContent = error.message;
+  } finally {
+    if (activeInterviewSession) setInterviewLoading(false);
+  }
+}
+
+function renderInterviewQuestion(question) {
+  interviewCategory.textContent = question?.category || "Role-specific";
+  interviewQuestion.textContent = question?.text || "Bole could not create the next question.";
+  submitInterviewAnswer.disabled = !question?.text;
+  submitInterviewAnswer.querySelector("span").textContent = "Get feedback";
+  if (question?.text) interviewAnswer.focus();
+}
+
+function renderInterviewFeedback(payload) {
+  interviewFeedback.hidden = false;
+  interviewScore.textContent = `${payload.score || 0}/100`;
+  interviewFeedbackCopy.textContent = payload.feedback || "Bole reviewed your answer.";
+  renderChips(interviewStrengths, payload.strengths || [], "No specific strengths returned");
+  renderChips(interviewImprovements, payload.improvements || [], "No specific improvements returned");
+}
+
+function setInterviewLoading(isLoading) {
+  submitInterviewAnswer.disabled = isLoading;
+  submitInterviewAnswer.querySelector("span").textContent = isLoading ? "Reviewing…" : "Get feedback";
+}
+
+function closeMockInterview() {
+  activeInterviewSession = null;
+  if (mockInterviewDialog?.open) mockInterviewDialog.close();
 }
 
 function renderMemory(memory) {

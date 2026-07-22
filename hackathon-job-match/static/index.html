@@ -212,6 +212,7 @@
             <p class="pitch"></p>
           </div>
           <div class="feedback-row">
+            <button type="button" class="interview-button">Practice interview</button>
             <button type="button" data-feedback="save">Save</button>
             <button type="button" data-feedback="not_interested">Not interested</button>
             <button type="button" data-feedback="applied">Applied</button>
@@ -262,6 +263,36 @@
         </div>
       </article>
     </template>
+
+    <dialog id="mockInterviewDialog" class="mock-interview-dialog" aria-labelledby="mockInterviewTitle">
+      <section class="mock-interview-panel">
+        <div class="panel-heading">
+          <div>
+            <p class="eyebrow">Mock interview</p>
+            <h2 id="mockInterviewTitle">Practice with Bole</h2>
+          </div>
+          <button id="closeInterviewButton" class="text-button" type="button">Close</button>
+        </div>
+        <p id="interviewRole" class="interview-role"></p>
+        <p id="interviewIntro" class="interview-intro" aria-live="polite"></p>
+        <div id="interviewFocus" class="chips"></div>
+        <section class="interview-question-card">
+          <span id="interviewCategory" class="match-badge"></span>
+          <p id="interviewQuestion"></p>
+        </section>
+        <label for="interviewAnswer">Your answer</label>
+        <textarea id="interviewAnswer" placeholder="Use a clear situation, your actions, and a measurable result when possible."></textarea>
+        <button id="submitInterviewAnswer" class="primary-button" type="button"><span>Get feedback</span></button>
+        <section id="interviewFeedback" class="interview-feedback" hidden>
+          <div class="interview-score"><span id="interviewScore"></span><label>answer score</label></div>
+          <p id="interviewFeedbackCopy"></p>
+          <div class="interview-feedback-grid">
+            <div><label>What worked</label><div id="interviewStrengths" class="chips"></div></div>
+            <div><label>Try next time</label><div id="interviewImprovements" class="chips"></div></div>
+          </div>
+        </section>
+      </section>
+    </dialog>
 
     <script src="/app.js"></script>
   </body>

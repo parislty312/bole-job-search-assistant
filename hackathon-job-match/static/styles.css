@@ -1070,6 +1070,18 @@ label {
   background: #e7f5f2;
 }
 
+.feedback-row .interview-button {
+  color: #244a8d;
+  border-color: rgba(66, 103, 178, 0.32);
+  background: #f2f5ff;
+}
+
+.feedback-row .interview-button:hover {
+  color: #1d3b71;
+  border-color: rgba(66, 103, 178, 0.52);
+  background: #e8eeff;
+}
+
 .feedback-row button:disabled {
   cursor: wait;
   opacity: 0.7;
@@ -1128,6 +1140,116 @@ label {
   line-height: 1.45;
 }
 
+.mock-interview-dialog {
+  width: min(720px, calc(100vw - 32px));
+  max-height: min(860px, calc(100vh - 32px));
+  overflow: auto;
+  padding: 0;
+  border: 0;
+  border-radius: 24px;
+  box-shadow: 0 24px 80px rgba(31, 47, 66, 0.28);
+  background: #fff;
+}
+
+.mock-interview-dialog::backdrop {
+  background: rgba(20, 32, 47, 0.48);
+  backdrop-filter: blur(3px);
+}
+
+.mock-interview-panel {
+  padding: 26px;
+}
+
+.mock-interview-panel h2 {
+  margin: 2px 0 0;
+  color: var(--ink);
+}
+
+.interview-role,
+.interview-intro {
+  margin: 12px 0;
+  color: #344250;
+  line-height: 1.5;
+}
+
+.interview-role {
+  font-weight: 800;
+}
+
+.interview-question-card {
+  margin: 18px 0;
+  padding: 18px;
+  border: 1px solid rgba(66, 103, 178, 0.22);
+  border-radius: 18px;
+  background: #f6f8ff;
+}
+
+.interview-question-card p {
+  margin: 12px 0 0;
+  color: #1d2e42;
+  font-size: 18px;
+  font-weight: 750;
+  line-height: 1.45;
+}
+
+.mock-interview-panel > label {
+  display: block;
+  margin: 16px 0 8px;
+  color: #344250;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+#interviewAnswer {
+  width: 100%;
+  min-height: 150px;
+  box-sizing: border-box;
+  resize: vertical;
+}
+
+.interview-feedback {
+  margin-top: 18px;
+  padding: 18px;
+  border: 1px solid #dfece9;
+  border-radius: 18px;
+  background: #f6faf9;
+}
+
+.interview-score {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.interview-score span {
+  color: #185f5a;
+  font-size: 26px;
+  font-weight: 900;
+}
+
+.interview-score label,
+.interview-feedback-grid label {
+  color: #5c6b7a;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.interview-feedback > p {
+  margin: 10px 0 16px;
+  color: #344250;
+  line-height: 1.5;
+}
+
+.interview-feedback-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.interview-feedback-grid .chips {
+  margin-top: 8px;
+}
+
 @media (max-width: 900px) {
   .auth-grid {
     grid-template-columns: 1fr;
@@ -1180,7 +1302,8 @@ label {
   .job-card,
   .insight-grid,
   .comparison-grid,
-  .profile-grid {
+  .profile-grid,
+  .interview-feedback-grid {
     grid-template-columns: 1fr;
   }
 

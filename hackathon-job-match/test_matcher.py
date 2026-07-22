@@ -4,6 +4,7 @@ from urllib.parse import urlparse
 from unittest.mock import patch
 
 from matcher import analyze_fit, extract_jobs, extract_role_terms, extract_skills
+from mock_interview import LLMUnavailable, normalize_interview_result, start_mock_interview
 from app import (
     build_multipart_form,
     build_user_intent,
@@ -26,6 +27,40 @@ from pdf_text import extract_pdf_text, normalize_pdf_text
 
 
 class MatcherTests(unittest.TestCase):
+    def test_mock_interview_normalizes_safe_feedback_shape(self):
+        result = normalize_interview_result(
+            {
+                "score": 86,
+                "feedback": "Use a clearer outcome.",
+                "strengths": ["Specific ownership"],
+                "improvements": ["Quantify the result"],
+                "next_question": {"category": "Behavioral", "text": "Tell me about a launch."},
+            }
+        )
+
+        self.assertEqual(result["score"], 86)
+        self.assertEqual(result["question"]["text"], "Tell me about a launch.")
+        self.assertIn("Specific ownership", result["strengths"])
+
+    def test_mock_interview_start_sends_selected_job_not_other_roles(self):
+        fake_response = {"output_text": '{"intro":"Let us practice.","focus_areas":["launches"],"question":{"category":"Behavioral","text":"How did you lead a launch?"}}'}
+        with patch.dict("os.environ", {"OPENAI_API_KEY": "test"}, clear=False), patch(
+            "mock_interview.call_openai_responses_api", return_value=fake_response
+        ) as call:
+            interview = start_mock_interview(
+                resume_text="Senior TPM with platform launches.",
+                job={"job_id": "job_tpm", "title": "Technical Program Manager", "matched_skills": ["Leadership"]},
+            )
+
+        request = call.call_args.args[0]["input"]
+        self.assertIn("Technical Program Manager", request)
+        self.assertIn("How did you lead a launch?", interview["question"]["text"])
+
+    def test_mock_interview_requires_server_side_api_key(self):
+        with patch.dict("os.environ", {}, clear=True):
+            with self.assertRaises(LLMUnavailable):
+                start_mock_interview(resume_text="Resume", job={"title": "Role"})
+
     def test_memory_curator_only_keeps_structured_preference_lists(self):
         curated = sanitize_memory_updates(
             {
