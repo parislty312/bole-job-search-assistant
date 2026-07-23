@@ -6,6 +6,7 @@ import re
 from dataclasses import dataclass
 from html.parser import HTMLParser
 from typing import Any, Iterable
+from urllib.parse import urlparse
 
 
 SKILL_ALIASES: dict[str, tuple[str, ...]] = {
@@ -164,6 +165,63 @@ class TextExtractor(HTMLParser):
         return normalize_lines("\n".join(self.parts))
 
 
+class JobDetailExtractor(HTMLParser):
+    """Extract the current job from a detail page without reading site navigation."""
+
+    _BLOCK_TAGS = {"h1", "h2", "h3", "h4", "li", "p", "section", "article", "div", "br"}
+    _IGNORED_TAGS = {"script", "style", "svg", "noscript", "nav", "footer"}
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.parts: list[str] = []
+        self.h1_parts: list[str] = []
+        self._main_depth = 0
+        self._ignored_depth = 0
+        self._in_h1 = False
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag == "main":
+            self._main_depth += 1
+            return
+        if not self._main_depth:
+            return
+        if self._ignored_depth:
+            self._ignored_depth += 1
+            return
+        if tag in self._IGNORED_TAGS:
+            self._ignored_depth = 1
+            return
+        if tag in self._BLOCK_TAGS:
+            self.parts.append("\n")
+        if tag == "h1":
+            self._in_h1 = True
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag == "main" and self._main_depth:
+            self._main_depth -= 1
+            return
+        if not self._main_depth:
+            return
+        if self._ignored_depth:
+            self._ignored_depth -= 1
+            return
+        if tag == "h1":
+            self._in_h1 = False
+        if tag in self._BLOCK_TAGS:
+            self.parts.append("\n")
+
+    def handle_data(self, data: str) -> None:
+        if not self._main_depth or self._ignored_depth:
+            return
+        text = html.unescape(data)
+        self.parts.append(text)
+        if self._in_h1:
+            self.h1_parts.append(text)
+
+    def detail(self) -> tuple[str, str]:
+        return normalize_space(" ".join(self.h1_parts)), normalize_lines("\n".join(self.parts))
+
+
 def analyze_fit(
     resume_text: str,
     page_text: str,
@@ -268,6 +326,10 @@ def extract_role_terms(text: str) -> list[str]:
 
 
 def extract_jobs(page_text: str, source_url: str = "") -> list[JobPosting]:
+    detail_job = extract_single_job_detail(page_text, source_url)
+    if detail_job:
+        return [detail_job]
+
     text, links = extract_readable_text_and_links(page_text)
     linked_jobs = jobs_from_links(links, source_url)
     block_jobs = jobs_from_text_blocks(text, source_url, links)
@@ -284,6 +346,38 @@ def extract_jobs(page_text: str, source_url: str = "") -> list[JobPosting]:
         seen[key] = len(jobs)
         jobs.append(job)
     return jobs
+
+
+def extract_single_job_detail(page_text: str, source_url: str) -> JobPosting | None:
+    """Return one canonical posting for a direct job-detail URL.
+
+    Career sites often render links to other openings in their navigation or
+    footer. Those are useful on a listing page, but wrong when the user pastes
+    one specific job URL.
+    """
+
+    if not is_single_job_detail_url(source_url) or "<" not in page_text:
+        return None
+
+    parser = JobDetailExtractor()
+    parser.feed(page_text)
+    title, description = parser.detail()
+    if not is_probable_job_title(title) or len(description) < 80:
+        return None
+    return JobPosting(title=clean_title(title), description=description, url=source_url)
+
+
+def is_single_job_detail_url(source_url: str) -> bool:
+    """Recognize paths such as /careers/solution-engineer without matching /careers."""
+
+    parsed = urlparse(source_url)
+    path_parts = [part.lower() for part in parsed.path.split("/") if part]
+    if "careers" not in path_parts:
+        return False
+    careers_index = path_parts.index("careers")
+    if len(path_parts) <= careers_index + 1:
+        return False
+    return path_parts[careers_index + 1] not in {"job", "jobs", "search"}
 
 
 def extract_readable_text_and_links(page_text: str) -> tuple[str, list[tuple[str, str]]]:

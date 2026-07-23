@@ -27,7 +27,7 @@ from llm_analyzer import (
     run_multi_agent_analysis,
 )
 from matcher import analyze_fit
-from mock_interview import evaluate_mock_answer, start_mock_interview
+from mock_interview import evaluate_mock_answer, polish_mock_answer, start_mock_interview
 from pdf_text import extract_pdf_text
 
 
@@ -81,6 +81,10 @@ class BoleHandler(BaseHTTPRequestHandler):
 
         if self.path == "/api/mock-interview/answer":
             self._handle_mock_interview_answer()
+            return
+
+        if self.path == "/api/mock-interview/polish":
+            self._handle_mock_interview_polish()
             return
 
         if self.path != "/api/analyze":
@@ -344,6 +348,7 @@ class BoleHandler(BaseHTTPRequestHandler):
             user_id = normalize_user_id(str(payload.get("user_id", "")))
             session_id = str(payload.get("session_id", "")).strip()
             answer = str(payload.get("answer", "")).strip()
+            question = str(payload.get("question", "")).strip()
             if not user_id or not session_id:
                 self._send_json({"error": "Your interview session is missing. Start again."}, status=400)
                 return
@@ -359,7 +364,8 @@ class BoleHandler(BaseHTTPRequestHandler):
                 self._send_json({"error": "This interview session has expired. Start a new one."}, status=404)
                 return
 
-            history = [*session["history"], {"question": session["question"]["text"], "answer": answer}]
+            current_question = question or session["question"]["text"]
+            history = [*session["history"], {"question": current_question, "answer": answer}]
             review = evaluate_mock_answer(
                 resume_text=session["resume_text"],
                 job=session["job"],
@@ -369,6 +375,7 @@ class BoleHandler(BaseHTTPRequestHandler):
             complete = session["question_count"] >= MAX_INTERVIEW_QUESTIONS or not review["question"]["text"]
             with INTERVIEW_SESSIONS_LOCK:
                 session["history"] = history
+                session["last_question"] = current_question
                 session["question"] = review["question"]
                 session["question_count"] += 1
             self._send_json({
@@ -386,6 +393,34 @@ class BoleHandler(BaseHTTPRequestHandler):
             self._send_json({"error": "Invalid JSON body."}, status=400)
         except Exception as exc:  # pragma: no cover - keeps the app resilient.
             self._send_json({"error": f"Interview feedback failed: {exc}"}, status=500)
+
+    def _handle_mock_interview_polish(self) -> None:
+        try:
+            payload = self._read_json()
+            user_id = normalize_user_id(str(payload.get("user_id", "")))
+            session_id = str(payload.get("session_id", "")).strip()
+            answer = str(payload.get("answer", "")).strip()
+            if not user_id or not session_id:
+                self._send_json({"error": "Your interview session is missing. Start again."}, status=400)
+                return
+            if not answer:
+                self._send_json({"error": "Submit an answer before polishing it."}, status=400)
+                return
+            with INTERVIEW_SESSIONS_LOCK:
+                session = INTERVIEW_SESSIONS.get(session_id)
+            if not session or session["user_id"] != user_id:
+                self._send_json({"error": "This interview session has expired. Start a new one."}, status=404)
+                return
+            polished = polish_mock_answer(
+                job=session["job"],
+                question=session.get("last_question", session["question"]["text"]),
+                answer=answer,
+            )
+            self._send_json(polished)
+        except json.JSONDecodeError:
+            self._send_json({"error": "Invalid JSON body."}, status=400)
+        except Exception as exc:  # pragma: no cover - keeps the app resilient.
+            self._send_json({"error": f"Answer polishing failed: {exc}"}, status=500)
 
     def log_message(self, format: str, *args: Any) -> None:
         print(f"{self.address_string()} - {format % args}")

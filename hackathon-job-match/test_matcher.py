@@ -4,7 +4,12 @@ from urllib.parse import urlparse
 from unittest.mock import patch
 
 from matcher import analyze_fit, extract_jobs, extract_role_terms, extract_skills
-from mock_interview import LLMUnavailable, normalize_interview_result, start_mock_interview
+from mock_interview import (
+    evaluate_mock_answer,
+    normalize_interview_result,
+    polish_mock_answer,
+    start_mock_interview,
+)
 from app import (
     build_multipart_form,
     build_user_intent,
@@ -56,10 +61,40 @@ class MatcherTests(unittest.TestCase):
         self.assertIn("Technical Program Manager", request)
         self.assertIn("How did you lead a launch?", interview["question"]["text"])
 
-    def test_mock_interview_requires_server_side_api_key(self):
+    def test_mock_interview_uses_guided_fallback_without_server_side_api_key(self):
         with patch.dict("os.environ", {}, clear=True):
-            with self.assertRaises(LLMUnavailable):
-                start_mock_interview(resume_text="Resume", job={"title": "Role"})
+            interview = start_mock_interview(
+                resume_text="Resume",
+                job={"title": "Technical Program Manager", "missing_skills": ["Cloud"]},
+            )
+
+        self.assertIn("guided practice", interview["intro"])
+        self.assertIn("Technical Program Manager", interview["question"]["text"])
+
+    def test_mock_interview_guided_fallback_reviews_star_answer(self):
+        with patch.dict("os.environ", {}, clear=True):
+            review = evaluate_mock_answer(
+                resume_text="Resume",
+                job={"title": "Technical Program Manager"},
+                history=[{"question": "Question", "answer": "Situation, task, action, result: improved launch time by 20%."}],
+                answer="Situation, task, action, result: improved launch time by 20%.",
+            )
+
+        self.assertGreater(review["score"], 60)
+        self.assertTrue(review["question"]["text"])
+
+    def test_answer_polish_uses_star_fallback_without_openai_key(self):
+        answer = "I coordinated a platform launch. I aligned engineering and product. We improved launch readiness by 20%."
+        with patch.dict("os.environ", {}, clear=True):
+            polished = polish_mock_answer(
+                job={"title": "Technical Program Manager"},
+                question="Tell me about a launch.",
+                answer=answer,
+            )
+
+        self.assertIn("coordinated a platform launch", polished["polished_answer"])
+        self.assertIn("situation", polished["star_outline"])
+        self.assertTrue(polished["edit_notes"])
 
     def test_memory_curator_only_keeps_structured_preference_lists(self):
         curated = sanitize_memory_updates(
@@ -165,6 +200,28 @@ class MatcherTests(unittest.TestCase):
 
         self.assertTrue(any(job.title == "Machine Learning Engineer" for job in jobs))
         self.assertTrue(any(job.title == "Data Scientist" for job in jobs))
+
+    def test_extract_jobs_uses_only_current_role_for_career_detail_page(self):
+        html = """
+        <html><body><main>
+          <nav><a href="/careers/brand-designer">Brand and Creative Designer</a></nav>
+          <section><h1>Solution Engineer</h1>
+            <p>Support B2B client onboarding, vendor integrations, and hands-on
+            technical issue resolution across external systems and our platform.</p>
+            <h2>What you will do</h2><p>Partner with customers to resolve integration issues.</p>
+          </section>
+          <footer><a href="/careers/ai-systems-engineer">AI Systems Engineer</a></footer>
+        </main></body></html>
+        """
+
+        jobs = extract_jobs(
+            html,
+            "https://39-ai.com/careers/solution-engineer-client-vendor-integrations",
+        )
+
+        self.assertEqual(len(jobs), 1)
+        self.assertEqual(jobs[0].title, "Solution Engineer")
+        self.assertIn("vendor integrations", jobs[0].description)
 
     def test_analyze_fit_ranks_strong_skill_overlap(self):
         resume = "Python, SQL, machine learning, LLM agents, dashboards"

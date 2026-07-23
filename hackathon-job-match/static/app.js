@@ -48,13 +48,24 @@ const interviewIntro = document.querySelector("#interviewIntro");
 const interviewFocus = document.querySelector("#interviewFocus");
 const interviewCategory = document.querySelector("#interviewCategory");
 const interviewQuestion = document.querySelector("#interviewQuestion");
+const previousInterviewQuestion = document.querySelector("#previousInterviewQuestion");
+const nextInterviewQuestion = document.querySelector("#nextInterviewQuestion");
+const interviewQuestionStatus = document.querySelector("#interviewQuestionStatus");
 const interviewAnswer = document.querySelector("#interviewAnswer");
+const interviewVoiceButton = document.querySelector("#interviewVoiceButton");
+const interviewVoiceButtonLabel = document.querySelector("#interviewVoiceButtonLabel");
+const interviewVoiceStatus = document.querySelector("#interviewVoiceStatus");
 const submitInterviewAnswer = document.querySelector("#submitInterviewAnswer");
 const interviewFeedback = document.querySelector("#interviewFeedback");
 const interviewScore = document.querySelector("#interviewScore");
 const interviewFeedbackCopy = document.querySelector("#interviewFeedbackCopy");
 const interviewStrengths = document.querySelector("#interviewStrengths");
 const interviewImprovements = document.querySelector("#interviewImprovements");
+const polishInterviewAnswer = document.querySelector("#polishInterviewAnswer");
+const polishedAnswer = document.querySelector("#polishedAnswer");
+const polishedAnswerCopy = document.querySelector("#polishedAnswerCopy");
+const starOutline = document.querySelector("#starOutline");
+const polishNotes = document.querySelector("#polishNotes");
 const RESULTS_PER_PAGE = 6;
 const MAX_RESULT_PAGES = 10;
 let activeUser = loadUser();
@@ -66,9 +77,17 @@ let mediaRecorder = null;
 let audioChunks = [];
 let voiceMode = "unsupported";
 let activeInterviewSession = null;
+let latestInterviewAnswer = "";
+let interviewSpeechRecognition = null;
+let interviewIsListening = false;
+let interviewMediaRecorder = null;
+let interviewAudioChunks = [];
+let interviewQuestions = [];
+let currentInterviewQuestionIndex = 0;
 
 renderAuthState();
 setupVoiceInput();
+setupInterviewVoiceInput();
 setupSidebarResize();
 
 prevPageButton?.addEventListener("click", () => {
@@ -89,6 +108,9 @@ mockInterviewDialog?.addEventListener("close", () => {
   activeInterviewSession = null;
 });
 submitInterviewAnswer?.addEventListener("click", submitInterviewResponse);
+polishInterviewAnswer?.addEventListener("click", polishLatestInterviewAnswer);
+previousInterviewQuestion?.addEventListener("click", () => navigateInterviewQuestion(-1));
+nextInterviewQuestion?.addEventListener("click", () => navigateInterviewQuestion(1));
 
 loginForm.addEventListener("submit", (event) => {
   event.preventDefault();
@@ -269,6 +291,114 @@ function setupVoiceInput() {
   });
 }
 
+function setupInterviewVoiceInput() {
+  if (!interviewVoiceButton) return;
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+  if (!SpeechRecognition && navigator.mediaDevices?.getUserMedia && window.MediaRecorder) {
+    interviewVoiceButton.addEventListener("click", toggleInterviewAudioRecording);
+    interviewVoiceStatus.textContent = "Click to record your answer. Bole will transcribe it before feedback.";
+    return;
+  }
+
+  if (!SpeechRecognition) {
+    interviewVoiceButton.addEventListener("click", () => {
+      interviewAnswer.focus();
+      interviewVoiceStatus.textContent = "Voice input is not supported in this browser. Type your answer here.";
+    });
+    return;
+  }
+
+  interviewSpeechRecognition = new SpeechRecognition();
+  interviewSpeechRecognition.continuous = false;
+  interviewSpeechRecognition.interimResults = true;
+  interviewSpeechRecognition.lang = navigator.language || "en-US";
+  interviewSpeechRecognition.addEventListener("start", () => {
+    interviewIsListening = true;
+    setInterviewVoiceState("Listening", "Listening… speak your answer.", true);
+  });
+  interviewSpeechRecognition.addEventListener("result", (event) => {
+    let finalTranscript = "";
+    let interimTranscript = "";
+    for (let index = event.resultIndex; index < event.results.length; index += 1) {
+      const transcript = event.results[index][0].transcript.trim();
+      if (event.results[index].isFinal) finalTranscript += `${transcript} `;
+      else interimTranscript += `${transcript} `;
+    }
+    if (interimTranscript) interviewVoiceStatus.textContent = interimTranscript.trim();
+    if (finalTranscript.trim()) appendInterviewAnswer(finalTranscript.trim());
+  });
+  interviewSpeechRecognition.addEventListener("error", (event) => {
+    interviewVoiceStatus.textContent = event.error === "not-allowed"
+      ? "Microphone permission was blocked. Allow access or type your answer."
+      : "Voice input stopped. Try again or type your answer.";
+  });
+  interviewSpeechRecognition.addEventListener("end", () => {
+    interviewIsListening = false;
+    setInterviewVoiceState("Speak your answer", "Voice text is added to your answer box. Review it before feedback.", false);
+  });
+  interviewVoiceButton.addEventListener("click", () => {
+    if (interviewIsListening) {
+      interviewSpeechRecognition.stop();
+      return;
+    }
+    try {
+      interviewSpeechRecognition.start();
+    } catch {
+      interviewVoiceStatus.textContent = "Voice input is already starting. Try again in a moment.";
+    }
+  });
+}
+
+async function toggleInterviewAudioRecording() {
+  if (interviewIsListening && interviewMediaRecorder) {
+    interviewMediaRecorder.stop();
+    return;
+  }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    interviewAudioChunks = [];
+    interviewMediaRecorder = new MediaRecorder(stream);
+    interviewMediaRecorder.addEventListener("dataavailable", (event) => {
+      if (event.data.size > 0) interviewAudioChunks.push(event.data);
+    });
+    interviewMediaRecorder.addEventListener("stop", async () => {
+      stopMicrophoneTracks(stream);
+      interviewIsListening = false;
+      setInterviewVoiceState("Speak your answer", "Transcribing your answer…", false);
+      try {
+        const audioBlob = new Blob(interviewAudioChunks, { type: interviewMediaRecorder?.mimeType || "audio/webm" });
+        appendInterviewAnswer(await transcribeAudioBlob(audioBlob));
+      } catch (error) {
+        interviewVoiceStatus.textContent = error.message;
+      } finally {
+        interviewAudioChunks = [];
+        interviewMediaRecorder = null;
+      }
+    });
+    interviewMediaRecorder.start();
+    interviewIsListening = true;
+    setInterviewVoiceState("Stop", "Recording… click Stop when you finish your answer.", true);
+  } catch {
+    interviewVoiceStatus.textContent = "Microphone permission was blocked. Allow access or type your answer.";
+    interviewAnswer.focus();
+  }
+}
+
+function setInterviewVoiceState(label, status, isListening) {
+  interviewVoiceButton.classList.toggle("is-listening", isListening);
+  interviewVoiceButton.setAttribute("aria-pressed", String(isListening));
+  interviewVoiceButtonLabel.textContent = label;
+  interviewVoiceStatus.textContent = status;
+}
+
+function appendInterviewAnswer(transcript) {
+  const existing = interviewAnswer.value.trim();
+  interviewAnswer.value = existing ? `${existing}\n${transcript}` : transcript;
+  interviewVoiceStatus.textContent = "Added voice text to your answer. Review it before feedback.";
+  interviewAnswer.focus();
+}
+
 function setupSidebarResize() {
   if (!appShell || !sidebarResizeHandle) return;
 
@@ -377,17 +507,7 @@ async function transcribeRecordedAudio() {
 
   try {
     const audioBlob = new Blob(audioChunks, { type: mediaRecorder?.mimeType || "audio/webm" });
-    const response = await fetch("/api/transcribe-voice", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        content_type: audioBlob.type || "audio/webm",
-        data: await fileToBase64(audioBlob),
-      }),
-    });
-    const payload = await response.json();
-    if (!response.ok) throw new Error(payload.error || "Could not transcribe voice input.");
-    appendTargetIntent(payload.text);
+    appendTargetIntent(await transcribeAudioBlob(audioBlob));
   } catch (error) {
     voiceStatus.textContent = error.message;
   } finally {
@@ -395,6 +515,20 @@ async function transcribeRecordedAudio() {
     audioChunks = [];
     mediaRecorder = null;
   }
+}
+
+async function transcribeAudioBlob(audioBlob) {
+  const response = await fetch("/api/transcribe-voice", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      content_type: audioBlob.type || "audio/webm",
+      data: await fileToBase64(audioBlob),
+    }),
+  });
+  const payload = await response.json();
+  if (!response.ok) throw new Error(payload.error || "Could not transcribe voice input.");
+  return payload.text;
 }
 
 function stopMicrophoneTracks(stream) {
@@ -685,8 +819,13 @@ async function openMockInterview(job) {
   interviewCategory.textContent = "Preparing";
   interviewAnswer.value = "";
   interviewFeedback.hidden = true;
+  polishedAnswer.hidden = true;
+  latestInterviewAnswer = "";
+  interviewQuestions = [];
+  currentInterviewQuestionIndex = 0;
+  renderInterviewQuestionNavigation();
   renderChips(interviewFocus, [], "Preparing interview focus");
-  mockInterviewDialog.showModal();
+  presentMockInterviewDialog();
 
   try {
     const response = await fetch("/api/mock-interview/start", {
@@ -701,10 +840,11 @@ async function openMockInterview(job) {
     });
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.error || "Could not start a mock interview.");
-    activeInterviewSession = { id: payload.session_id, job };
+    activeInterviewSession = { id: payload.session_id, job, complete: false };
     interviewIntro.textContent = payload.intro || "Answer as if you were speaking with the hiring team.";
     renderChips(interviewFocus, payload.focus_areas || [], "Role-specific practice");
-    renderInterviewQuestion(payload.question);
+    interviewQuestions = [{ question: payload.question, answer: "", feedback: null, nextQuestion: null }];
+    renderCurrentInterviewQuestion();
   } catch (error) {
     interviewIntro.textContent = error.message;
     interviewCategory.textContent = "Unavailable";
@@ -719,6 +859,8 @@ async function submitInterviewResponse() {
     return;
   }
   setInterviewLoading(true);
+  latestInterviewAnswer = answer;
+  const current = interviewQuestions[currentInterviewQuestionIndex];
   try {
     const response = await fetch("/api/mock-interview/answer", {
       method: "POST",
@@ -726,21 +868,21 @@ async function submitInterviewResponse() {
       body: JSON.stringify({
         user_id: activeUser?.id || "",
         session_id: activeInterviewSession.id,
+        question: current?.question?.text || "",
         answer,
       }),
     });
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.error || "Could not review this answer.");
-    renderInterviewFeedback(payload);
-    interviewAnswer.value = "";
+    current.answer = answer;
+    current.feedback = payload;
+    current.nextQuestion = payload.next_question?.text ? payload.next_question : null;
+    renderCurrentInterviewQuestion();
     if (payload.complete) {
-      activeInterviewSession = null;
-      submitInterviewAnswer.disabled = true;
-      submitInterviewAnswer.querySelector("span").textContent = "Practice complete";
-      interviewIntro.textContent = "You completed this short practice round. Review the feedback and try another role when ready.";
+      activeInterviewSession.complete = true;
+      interviewIntro.textContent = "You completed this short practice round. Review or polish your answers before closing.";
     } else {
-      renderInterviewQuestion(payload.next_question);
-      interviewIntro.textContent = `Question ${payload.question_count || 2} of 5. Use the feedback to strengthen your next answer.`;
+      interviewIntro.textContent = "Feedback is ready. When you are done reviewing or polishing this answer, select Next question.";
     }
   } catch (error) {
     interviewIntro.textContent = error.message;
@@ -749,20 +891,102 @@ async function submitInterviewResponse() {
   }
 }
 
-function renderInterviewQuestion(question) {
+function renderInterviewQuestion(question, { focus = true } = {}) {
   interviewCategory.textContent = question?.category || "Role-specific";
   interviewQuestion.textContent = question?.text || "Bole could not create the next question.";
   submitInterviewAnswer.disabled = !question?.text;
   submitInterviewAnswer.querySelector("span").textContent = "Get feedback";
-  if (question?.text) interviewAnswer.focus();
+  if (question?.text && focus) interviewAnswer.focus();
+}
+
+function renderCurrentInterviewQuestion() {
+  const current = interviewQuestions[currentInterviewQuestionIndex];
+  if (!current) return;
+  latestInterviewAnswer = current.answer || "";
+  renderInterviewQuestion(current.question, { focus: !current.answer });
+  interviewAnswer.value = current.answer || "";
+  if (current.feedback) {
+    renderInterviewFeedback(current.feedback);
+  } else {
+    interviewFeedback.hidden = true;
+    polishedAnswer.hidden = true;
+  }
+  renderInterviewQuestionNavigation();
+}
+
+function navigateInterviewQuestion(direction) {
+  const nextIndex = currentInterviewQuestionIndex + direction;
+  if (nextIndex < 0) return;
+  if (nextIndex >= interviewQuestions.length) {
+    const current = interviewQuestions[currentInterviewQuestionIndex];
+    if (!current?.nextQuestion || activeInterviewSession?.complete) return;
+    interviewQuestions.push({ question: current.nextQuestion, answer: "", feedback: null, nextQuestion: null });
+  }
+  currentInterviewQuestionIndex = nextIndex;
+  renderCurrentInterviewQuestion();
+  interviewIntro.textContent = `Question ${currentInterviewQuestionIndex + 1} of 5. Complete the answer and request feedback when ready.`;
+}
+
+function renderInterviewQuestionNavigation() {
+  const current = interviewQuestions[currentInterviewQuestionIndex];
+  const hasNext = currentInterviewQuestionIndex < interviewQuestions.length - 1 || Boolean(current?.nextQuestion);
+  previousInterviewQuestion.disabled = currentInterviewQuestionIndex === 0;
+  nextInterviewQuestion.disabled = !hasNext || Boolean(activeInterviewSession?.complete);
+  interviewQuestionStatus.textContent = interviewQuestions.length
+    ? `Question ${currentInterviewQuestionIndex + 1} of 5`
+    : "Preparing questions";
 }
 
 function renderInterviewFeedback(payload) {
   interviewFeedback.hidden = false;
+  polishedAnswer.hidden = true;
   interviewScore.textContent = `${payload.score || 0}/100`;
   interviewFeedbackCopy.textContent = payload.feedback || "Bole reviewed your answer.";
   renderChips(interviewStrengths, payload.strengths || [], "No specific strengths returned");
   renderChips(interviewImprovements, payload.improvements || [], "No specific improvements returned");
+  polishInterviewAnswer.disabled = !latestInterviewAnswer;
+}
+
+async function polishLatestInterviewAnswer() {
+  if (!activeInterviewSession || !latestInterviewAnswer) return;
+  polishInterviewAnswer.disabled = true;
+  polishInterviewAnswer.textContent = "Polishing…";
+  try {
+    const response = await fetch("/api/mock-interview/polish", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        user_id: activeUser?.id || "",
+        session_id: activeInterviewSession.id,
+        answer: latestInterviewAnswer,
+      }),
+    });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.error || "Could not polish this answer.");
+    renderPolishedAnswer(payload);
+  } catch (error) {
+    interviewFeedbackCopy.textContent = error.message;
+  } finally {
+    polishInterviewAnswer.disabled = false;
+    polishInterviewAnswer.textContent = "Polish my answer";
+  }
+}
+
+function renderPolishedAnswer(payload) {
+  polishedAnswer.hidden = false;
+  polishedAnswerCopy.textContent = payload.polished_answer || latestInterviewAnswer;
+  starOutline.innerHTML = "";
+  Object.entries(payload.star_outline || {}).forEach(([label, value]) => {
+    const item = document.createElement("div");
+    item.className = "star-item";
+    const heading = document.createElement("strong");
+    heading.textContent = label;
+    const copy = document.createElement("p");
+    copy.textContent = value || "Add a concise detail from your experience.";
+    item.append(heading, copy);
+    starOutline.appendChild(item);
+  });
+  renderChips(polishNotes, payload.edit_notes || [], "No editing notes returned");
 }
 
 function setInterviewLoading(isLoading) {
@@ -772,7 +996,22 @@ function setInterviewLoading(isLoading) {
 
 function closeMockInterview() {
   activeInterviewSession = null;
-  if (mockInterviewDialog?.open) mockInterviewDialog.close();
+  if (!mockInterviewDialog?.open) return;
+  if (typeof mockInterviewDialog.close === "function") {
+    mockInterviewDialog.close();
+  } else {
+    mockInterviewDialog.removeAttribute("open");
+  }
+}
+
+function presentMockInterviewDialog() {
+  if (!mockInterviewDialog) return;
+  if (typeof mockInterviewDialog.showModal === "function") {
+    mockInterviewDialog.showModal();
+  } else {
+    // Keeps the interview usable in embedded browsers without full dialog support.
+    mockInterviewDialog.setAttribute("open", "");
+  }
 }
 
 function renderMemory(memory) {

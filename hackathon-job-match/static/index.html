@@ -4,13 +4,15 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Bole Job Matcher</title>
+    <link rel="icon" type="image/svg+xml" href="/assets/bole-logo.svg">
+    <link rel="apple-touch-icon" href="/assets/bole-logo.svg">
     <link rel="stylesheet" href="/styles.css">
   </head>
   <body>
     <section id="authView" class="auth-view">
       <div class="auth-card">
         <div class="auth-brand">
-          <span class="brand-mark">B</span>
+          <img class="brand-mark" src="/assets/bole-logo.svg" alt="Bole logo">
           <div>
             <p class="eyebrow">Bole</p>
             <h1>Your personal job search assistant with long-term memory</h1>
@@ -39,7 +41,7 @@
     <main id="appShell" class="app-shell" hidden>
       <aside class="sidebar">
         <div class="brand">
-          <span class="brand-mark">B</span>
+          <img class="brand-mark" src="/assets/bole-logo.svg" alt="Bole logo">
           <div>
             <p class="eyebrow">Hackathon MVP</p>
             <h1>Bole</h1>
@@ -280,8 +282,20 @@
           <span id="interviewCategory" class="match-badge"></span>
           <p id="interviewQuestion"></p>
         </section>
+        <nav class="interview-question-nav" aria-label="Mock interview questions">
+          <button id="previousInterviewQuestion" type="button">Previous question</button>
+          <span id="interviewQuestionStatus"></span>
+          <button id="nextInterviewQuestion" type="button">Next question</button>
+        </nav>
         <label for="interviewAnswer">Your answer</label>
         <textarea id="interviewAnswer" placeholder="Use a clear situation, your actions, and a measurable result when possible."></textarea>
+        <div class="interview-voice-controls">
+          <button id="interviewVoiceButton" class="voice-button" type="button" aria-pressed="false">
+            <span class="voice-icon" aria-hidden="true"></span>
+            <span id="interviewVoiceButtonLabel">Speak your answer</span>
+          </button>
+          <span id="interviewVoiceStatus" class="voice-status" aria-live="polite">Use voice input to add your answer, then review before submitting.</span>
+        </div>
         <button id="submitInterviewAnswer" class="primary-button" type="button"><span>Get feedback</span></button>
         <section id="interviewFeedback" class="interview-feedback" hidden>
           <div class="interview-score"><span id="interviewScore"></span><label>answer score</label></div>
@@ -290,6 +304,19 @@
             <div><label>What worked</label><div id="interviewStrengths" class="chips"></div></div>
             <div><label>Try next time</label><div id="interviewImprovements" class="chips"></div></div>
           </div>
+          <button id="polishInterviewAnswer" class="polish-answer-button" type="button">Polish my answer</button>
+          <section id="polishedAnswer" class="polished-answer" hidden>
+            <div class="panel-heading">
+              <h3>Polished answer</h3>
+              <span class="match-badge">STAR structure</span>
+            </div>
+            <p id="polishedAnswerCopy"></p>
+            <div id="starOutline" class="star-outline"></div>
+            <div>
+              <label>Editing notes</label>
+              <div id="polishNotes" class="chips"></div>
+            </div>
+          </section>
         </section>
       </section>
     </dialog>
